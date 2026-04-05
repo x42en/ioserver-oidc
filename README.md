@@ -49,11 +49,11 @@
 
 ## Requirements
 
-| Dependency | Version  |
-|------------|----------|
-| Node.js    | ≥ 20     |
-| ioserver   | ≥ 2.0.0  |
-| jose       | ≥ 6.0.0  |
+| Dependency | Version |
+| ---------- | ------- |
+| Node.js    | ≥ 20    |
+| ioserver   | ≥ 2.0.0 |
+| jose       | ≥ 6.0.0 |
 
 ---
 
@@ -87,7 +87,9 @@ import {
 } from "ioserver-oidc";
 import { IOServer } from "ioserver";
 
-const server = new IOServer({ /* your IOServer options */ });
+const server = new IOServer({
+  /* your IOServer options */
+});
 
 // Reads AUTH_SERVICE_URL + AUTH_SERVICE_APP_SLUG from process.env
 server.addManager({ name: "oidcConfig", manager: OidcConfigManager });
@@ -99,7 +101,7 @@ server.addManager({ name: "oidcConfig", manager: OidcConfigManager });
 server.addController({
   name: "profile",
   controller: ProfileController,
-  middlewares: [OidcHttpMiddleware],   // ← JWT-required
+  middlewares: [OidcHttpMiddleware], // ← JWT-required
   prefix: "/profile",
 });
 ```
@@ -141,12 +143,12 @@ socket.on("ping", () => {
 
 ## Environment variables
 
-| Variable               | Required | Default                                  | Description                                                  |
-|------------------------|----------|------------------------------------------|--------------------------------------------------------------|
-| `AUTH_SERVICE_URL`     | ✅        | —                                        | Public base URL of your auth-service. E.g. `https://auth.example.com` |
-| `AUTH_SERVICE_APP_SLUG`| ✅        | —                                        | OAuth2 `client_id` / app slug registered in auth-service    |
-| `AUTH_SERVICE_JWKS_URI`| ❌        | `<AUTH_SERVICE_URL>/api/auth/jwks`       | Override the JWKS endpoint                                   |
-| `AUTH_SERVICE_ISSUER`  | ❌        | `<AUTH_SERVICE_URL>`                     | Override the expected `iss` claim                            |
+| Variable                | Required | Default                            | Description                                                           |
+| ----------------------- | -------- | ---------------------------------- | --------------------------------------------------------------------- |
+| `AUTH_SERVICE_URL`      | ✅       | —                                  | Public base URL of your auth-service. E.g. `https://auth.example.com` |
+| `AUTH_SERVICE_APP_SLUG` | ✅       | —                                  | OAuth2 `client_id` / app slug registered in auth-service              |
+| `AUTH_SERVICE_JWKS_URI` | ❌       | `<AUTH_SERVICE_URL>/api/auth/jwks` | Override the JWKS endpoint                                            |
+| `AUTH_SERVICE_ISSUER`   | ❌       | `<AUTH_SERVICE_URL>`               | Override the expected `iss` claim                                     |
 
 All variables are read **once** at server startup by `OidcConfigManager.start()`.  
 If `OidcConfigManager` is not registered, each middleware reads the same
@@ -176,6 +178,7 @@ Extends `BaseMiddleware`. Verifies the `Authorization: Bearer <token>` header on
 every inbound Fastify request.
 
 **Flow:**
+
 1. Extracts the Bearer token from `Authorization` header
 2. Verifies JWT signature via JWKS (`iss` + `aud` + expiry)
 3. Calls `appHandle.users.findOrCreate(sub, { email, name })` if available
@@ -192,6 +195,7 @@ every inbound Fastify request.
 Same as `OidcHttpMiddleware` but for Socket.IO connections.
 
 Token is read from (in order):
+
 1. `socket.handshake.auth.token` — preferred, set by the Vue/web client
 2. `socket.handshake.headers.authorization` (`Bearer` prefix) — fallback
 
@@ -242,10 +246,10 @@ import type { OidcConfig, OidcUserContext, OidcFeatures } from "ioserver-oidc";
 
 ```ts
 interface OidcConfig {
-  authServiceUrl: string;   // e.g. "https://auth.example.com"
-  appSlug:        string;   // OAuth2 client_id (= app slug)
-  jwksUri?:       string;   // Override JWKS endpoint
-  issuer?:        string;   // Override expected `iss` claim
+  authServiceUrl: string; // e.g. "https://auth.example.com"
+  appSlug: string; // OAuth2 client_id (= app slug)
+  jwksUri?: string; // Override JWKS endpoint
+  issuer?: string; // Override expected `iss` claim
 }
 ```
 
@@ -253,14 +257,14 @@ interface OidcConfig {
 
 ```ts
 interface OidcUserContext {
-  userId:      string;         // Local DB user ID (after findOrCreate)
-  sub:         string;         // OIDC sub claim
-  email:       string | null;
-  name:        string | null;
-  userRole:    string;         // First element of roles[], fallback "user"
-  roles:       string[];
+  userId: string; // Local DB user ID (after findOrCreate)
+  sub: string; // OIDC sub claim
+  email: string | null;
+  name: string | null;
+  userRole: string; // First element of roles[], fallback "user"
+  roles: string[];
   permissions: string[];
-  features:    OidcFeatures;   // Record<string, unknown>
+  features: OidcFeatures; // Record<string, unknown>
 }
 ```
 
@@ -270,14 +274,14 @@ interface OidcUserContext {
 
 After successful authentication the following properties are available:
 
-| Property      | Type                    | Source                         |
-|---------------|-------------------------|--------------------------------|
-| `sub`         | `string`                | JWT `sub` claim                |
-| `userId`      | `string`                | Local DB `users.id`            |
-| `userRole`    | `string`                | `roles[0]` or `"user"`         |
-| `roles`       | `string[]`              | JWT `roles` claim              |
-| `permissions` | `string[]`              | JWT `permissions` claim        |
-| `features`    | `Record<string,unknown>`| JWT `features` claim           |
+| Property      | Type                     | Source                  |
+| ------------- | ------------------------ | ----------------------- |
+| `sub`         | `string`                 | JWT `sub` claim         |
+| `userId`      | `string`                 | Local DB `users.id`     |
+| `userRole`    | `string`                 | `roles[0]` or `"user"`  |
+| `roles`       | `string[]`               | JWT `roles` claim       |
+| `permissions` | `string[]`               | JWT `permissions` claim |
+| `features`    | `Record<string,unknown>` | JWT `features` claim    |
 
 In TypeScript, cast the Fastify `request` or Socket.IO `socket` to `any` (or
 augment the types in your app) to access these properties.
@@ -286,13 +290,13 @@ augment the types in your app) to access these properties.
 
 ## Error codes
 
-| Code                      | HTTP / Socket | Meaning                                  |
-|---------------------------|---------------|------------------------------------------|
-| `ERR_AUTH_TOKEN_REQUIRED` | 401 / reject  | No `Authorization` header or auth token  |
-| `ERR_AUTH_TOKEN_INVALID`  | 401 / reject  | JWT signature / claims verification failed|
-| `ERR_USER_DISABLED`       | 403           | User account is disabled in the local DB |
-| `ERR_USER_PROVISION_FAILED`| 500          | `findOrCreate` threw an error            |
-| `ERR_FORBIDDEN`           | — / reject    | User lacks the required role             |
+| Code                        | HTTP / Socket | Meaning                                    |
+| --------------------------- | ------------- | ------------------------------------------ |
+| `ERR_AUTH_TOKEN_REQUIRED`   | 401 / reject  | No `Authorization` header or auth token    |
+| `ERR_AUTH_TOKEN_INVALID`    | 401 / reject  | JWT signature / claims verification failed |
+| `ERR_USER_DISABLED`         | 403           | User account is disabled in the local DB   |
+| `ERR_USER_PROVISION_FAILED` | 500           | `findOrCreate` threw an error              |
+| `ERR_FORBIDDEN`             | — / reject    | User lacks the required role               |
 
 ---
 
