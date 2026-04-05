@@ -1,0 +1,32 @@
+# Build output
+dist/
+
+# Dependencies
+node_modules/
+
+# Lockfile (committed at repo level — keep it)
+# pnpm-lock.yaml
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Coverage / test output
+coverage/
+.nyc_output/

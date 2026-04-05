@@ -1,0 +1,23 @@
+# Source files included in the published package are declared in
+# package.json "files" (only "dist/").  This file excludes everything
+# else that is NOT caught by the default npm ignore rules.
+
+# Source TypeScript (compiled output is in dist/)
+src/
+
+# Tests & tooling
+*.test.ts
+*.spec.ts
+vitest.config.*
+jest.config.*
+
+# Dev config
+.eslintrc*
+.prettierrc*
+
+# CI / GitHub
+.github/
+
+# Misc
+*.log
+.DS_Store
