@@ -145,7 +145,26 @@
 
       sessionStorage.removeItem('pkce_verifier');
       sessionStorage.removeItem('pkce_state');
-      sessionStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+      return data.access_token;
+    }
+
+    // ── Rafraîchissement silencieux du token ───────────────────────────────
+    async function refreshAccessToken() {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) throw new Error('Aucun refresh_token disponible.');
+
+      const res = await fetch('/api/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error_description ?? data.error ?? `HTTP ${res.status}`);
+
+      localStorage.setItem('access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
       return data.access_token;
     }
 
@@ -159,7 +178,8 @@
     }
 
     function logout() {
-      sessionStorage.clear();
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
       history.replaceState({}, '', '/');
       render();
     }
@@ -232,16 +252,24 @@
         return;
       }
 
-      // Token déjà présent en session
-      const token = sessionStorage.getItem('access_token');
+      // Token déjà présent en localStorage
+      let token = localStorage.getItem('access_token');
       if (token) {
         showStatus('Chargement du profil…');
         try {
           const profile = await fetchProfile(token);
           showProfile(profile);
         } catch {
-          sessionStorage.removeItem('access_token');
-          showLogin('Session expirée — veuillez vous reconnecter.');
+          // Token expiré — tentative de refresh silencieux
+          try {
+            token = await refreshAccessToken();
+            const profile = await fetchProfile(token);
+            showProfile(profile);
+          } catch {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            showLogin('Session expirée — veuillez vous reconnecter.');
+          }
         }
         return;
       }

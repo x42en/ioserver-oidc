@@ -15,7 +15,7 @@ services:
 
   # ── PKI: Certificate Authority ────────────────────────────────────────────
   upki-ca:
-    image: ghcr.io/circle-rd/upki:latest
+    image: ghcr.io/circle-rd/upki-ca:nightly
     restart: unless-stopped
     environment:
       UPKI_DATA_DIR: /data
@@ -33,7 +33,7 @@ services:
 
   # ── PKI: Registration Authority (ACME v2) ─────────────────────────────────
   upki-ra:
-    image: ghcr.io/circle-rd/upki-ra:latest
+    image: ghcr.io/circle-rd/upki-ra:nightly
     restart: unless-stopped
     depends_on:
       upki-ca:
@@ -136,6 +136,9 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       CORS_ORIGINS: https://app.${DOMAIN}
+      TEMPLATES_DIR: /templates
+    volumes:
+      - ./templates:/templates:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)"

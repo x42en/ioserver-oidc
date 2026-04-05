@@ -116,11 +116,9 @@ app.post("/api/token", async (req, res) => {
   };
 
   if (!code || !code_verifier || !redirect_uri) {
-    res
-      .status(400)
-      .json({
-        error: "Champs requis manquants : code, code_verifier, redirect_uri",
-      });
+    res.status(400).json({
+      error: "Champs requis manquants : code, code_verifier, redirect_uri",
+    });
     return;
   }
 
@@ -147,6 +145,39 @@ app.post("/api/token", async (req, res) => {
   } catch (err) {
     console.error("Erreur échange de token :", err);
     res.status(502).json({ error: "Token exchange failed" });
+  }
+});
+
+// Refresh token — échange un refresh_token contre de nouveaux tokens
+// Le client_secret ne quitte jamais le serveur
+app.post("/api/refresh", async (req, res) => {
+  const { refresh_token } = req.body as { refresh_token?: string };
+  if (!refresh_token) {
+    res.status(400).json({ error: "refresh_token manquant" });
+    return;
+  }
+
+  const form = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token,
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
+  });
+
+  try {
+    const tokenRes = await fetch(
+      `${AUTH_SERVICE_INTERNAL_URL}/api/auth/oauth2/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form,
+      },
+    );
+    const data = (await tokenRes.json()) as Record<string, unknown>;
+    res.status(tokenRes.status).json(data);
+  } catch (err) {
+    console.error("Erreur refresh token :", err);
+    res.status(502).json({ error: "Token refresh failed" });
   }
 });
 
