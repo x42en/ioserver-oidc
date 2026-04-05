@@ -7,24 +7,77 @@ networks:
 volumes:
   postgres_data:
   credentials:      # volume partagé entre setup et webapp (stocke le client_secret OAuth)
+  upki-ca-data:    # données persistantes du CA (clé, cert, config)
+  upki-ra-data:    # données persistantes de la RA (cert RA, acme.db)
+  acme:            # acme.json de Traefik (certificats TLS obtenus via ACME)
 
 services:
+
+  # ── PKI: Certificate Authority ────────────────────────────────────────────
+  upki-ca:
+    image: ghcr.io/circle-rd/upki:latest
+    restart: unless-stopped
+    environment:
+      UPKI_DATA_DIR: /data
+      UPKI_CA_SEED: ${PKI_SEED}
+    volumes:
+      - upki-ca-data:/data
+    networks:
+      - demo-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 5000)); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── PKI: Registration Authority (ACME v2) ─────────────────────────────────
+  upki-ra:
+    image: ghcr.io/circle-rd/upki-ra:latest
+    restart: unless-stopped
+    depends_on:
+      upki-ca:
+        condition: service_healthy
+    environment:
+      UPKI_DATA_DIR: /data
+      UPKI_CA_HOST: upki-ca
+      UPKI_CA_SEED: ${PKI_SEED}
+      UPKI_RA_HOST: 0.0.0.0
+    volumes:
+      - upki-ra-data:/data
+    networks:
+      - demo-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ── Reverse-proxy ─────────────────────────────────────────────────────────
   traefik:
     image: traefik:v3
     restart: unless-stopped
+    depends_on:
+      upki-ra:
+        condition: service_healthy
     command:
       - --api.insecure=true
       - --providers.docker=true
       - --providers.docker.exposedByDefault=false
       - --providers.docker.network=demo-net
       - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.upki.acme.caserver=http://upki-ra:8000/acme/directory
+      - --certificatesresolvers.upki.acme.storage=/acme/acme.json
+      - --certificatesresolvers.upki.acme.httpchallenge.entrypoint=web
     ports:
       - "80:80"
+      - "443:443"
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme:/acme
     networks:
       - demo-net
 
@@ -75,18 +128,20 @@ services:
       PORT: "3001"
       HOST: 0.0.0.0
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      BETTER_AUTH_URL: http://auth.${DOMAIN}   # = issuer des JWT
+      BETTER_AUTH_URL: https://auth.${DOMAIN}   # = issuer des JWT
       DATABASE_URL: postgres://auth:${POSTGRES_PASSWORD}@postgres:5432/auth
       POSTGRES_USER: auth
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: auth
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      CORS_ORIGINS: http://app.${DOMAIN}
+      CORS_ORIGINS: https://app.${DOMAIN}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)"
-      - "traefik.http.routers.auth.entrypoints=web"
+      - "traefik.http.routers.auth.entrypoints=websecure"
+      - "traefik.http.routers.auth.tls=true"
+      - "traefik.http.routers.auth.tls.certresolver=upki"
       - "traefik.http.services.auth.loadbalancer.server.port=3001"
     networks:
       - demo-net
@@ -110,7 +165,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       APP_SLUG: ${APP_SLUG}
-      REDIRECT_URI: http://app.${DOMAIN}/callback
+      REDIRECT_URI: https://app.${DOMAIN}/callback
     volumes:
       - credentials:/shared
     networks:
@@ -124,17 +179,19 @@ services:
       setup:
         condition: service_completed_successfully
     environment:
-      AUTH_SERVICE_URL: http://auth.${DOMAIN}          # URL publique (issuer JWT + redirections)
+      AUTH_SERVICE_URL: https://auth.${DOMAIN}          # URL publique (issuer JWT + redirections)
       AUTH_SERVICE_INTERNAL_URL: http://auth-service:3001  # URL interne (JWKS + échange token)
       APP_SLUG: ${APP_SLUG}
-      REDIRECT_URI: http://app.${DOMAIN}/callback
+      REDIRECT_URI: https://app.${DOMAIN}/callback
       PORT: "3000"
     volumes:
       - credentials:/shared
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.webapp.rule=Host(`app.${DOMAIN}`)"
-      - "traefik.http.routers.webapp.entrypoints=web"
+      - "traefik.http.routers.webapp.entrypoints=websecure"
+      - "traefik.http.routers.webapp.tls=true"
+      - "traefik.http.routers.webapp.tls.certresolver=upki"
       - "traefik.http.services.webapp.loadbalancer.server.port=3000"
     networks:
       - demo-net
