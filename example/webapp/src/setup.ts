@@ -36,6 +36,10 @@ if (
   process.exit(1);
 }
 
+// BetterAuth exige un en-tête Origin correspondant à un trustedOrigin.
+// On le dérive de REDIRECT_URI (ex: http://app.demo.lan/callback → http://app.demo.lan).
+const APP_ORIGIN = new URL(REDIRECT_URI).origin;
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -61,21 +65,38 @@ async function waitForHealth(): Promise<void> {
 
 interface SignInResponse {
   user: { id: string };
-  session: { token: string };
+  token: string;
 }
 
+// BetterAuth utilise un cookie signé pour les sessions — bearer token non supporté
+// nativement sans le plugin bearerAuth. On capture le Set-Cookie du sign-in et on
+// le renvoie comme Cookie dans les appels admin.
 async function signIn(): Promise<string> {
   const res = await fetch(`${AUTH_INTERNAL}/api/auth/sign-in/email`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: APP_ORIGIN,
+    },
     body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
   });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Connexion admin échouée (${res.status}) : ${body}`);
   }
-  const data = (await res.json()) as SignInResponse;
-  return data.session.token;
+  // Extraire les cookies de session depuis Set-Cookie
+  const setCookie = res.headers.get("set-cookie");
+  if (!setCookie) {
+    throw new Error("Aucun cookie de session reçu après le sign-in.");
+  }
+  // Reconstituer la valeur Cookie à partir de toutes les directives Set-Cookie :
+  // garder uniquement la partie nom=valeur (avant le premier ;) de chaque cookie.
+  const cookieHeader = setCookie
+    .split(/,(?=[^ ])/)
+    .map((c) => c.split(";")[0]?.trim())
+    .filter(Boolean)
+    .join("; ");
+  return cookieHeader;
 }
 
 interface CreateAppResponse {
@@ -92,10 +113,11 @@ interface RotateSecretResponse {
   clientSecret: string;
 }
 
-async function provisionApp(token: string): Promise<string> {
+async function provisionApp(cookie: string): Promise<string> {
   const authHeaders = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
+    Cookie: cookie,
+    Origin: APP_ORIGIN,
   };
 
   // Tentative de création
@@ -129,7 +151,7 @@ async function provisionApp(token: string): Promise<string> {
     console.log("L'application existe déjà — rotation du client_secret…");
 
     const listRes = await fetch(`${AUTH_INTERNAL}/api/admin/applications`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Cookie: cookie, Origin: APP_ORIGIN },
     });
     if (!listRes.ok) {
       throw new Error(
@@ -146,7 +168,7 @@ async function provisionApp(token: string): Promise<string> {
 
     const rotateRes = await fetch(
       `${AUTH_INTERNAL}/api/admin/applications/${app.id}/rotate-secret`,
-      { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+      { method: "POST", headers: { Cookie: cookie, Origin: APP_ORIGIN } },
     );
     if (!rotateRes.ok) {
       throw new Error(`Rotation du secret échouée : ${rotateRes.status}`);

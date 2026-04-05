@@ -71,7 +71,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      NODE_ENV: development            # autorise les redirect_uri HTTP
+      NODE_ENV: production
       PORT: "3001"
       HOST: 0.0.0.0
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
@@ -91,11 +91,11 @@ services:
     networks:
       - demo-net
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health | grep -q ok"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health | grep -q ok"]
       interval: 10s
       timeout: 5s
-      retries: 15
-      start_period: 30s
+      retries: 5
+      start_period: 10s
 
   # ── Setup : provisionne l'application OAuth (s'exécute une seule fois) ────
   setup:
