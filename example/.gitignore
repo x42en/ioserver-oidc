@@ -1,0 +1,6 @@
+# webapp build artefacts (also covered by root .gitignore)
+webapp/node_modules/
+webapp/dist/
+
+# secrets — copy .env.example to .env and fill in values
+.env

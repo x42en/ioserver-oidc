@@ -1,0 +1,140 @@
+name: oidc-demo
+
+networks:
+  demo-net:
+    name: demo-net
+
+volumes:
+  postgres_data:
+  credentials:      # volume partagé entre setup et webapp (stocke le client_secret OAuth)
+
+services:
+
+  # ── Reverse-proxy ─────────────────────────────────────────────────────────
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.docker.network=demo-net
+      - --entrypoints.web.address=:80
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - demo-net
+
+  # ── Résolveur DNS (wildcard *.DOMAIN → HOST_IP + noms de conteneurs) ──────
+  dns:
+    image: ghcr.io/circle-rd/dns-resolver:latest
+    restart: unless-stopped
+    ports:
+      - "${HOST_IP}:53:53/udp"
+      - "${HOST_IP}:53:53/tcp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      HOST_IP: ${HOST_IP}
+      DNS_AUTHORITATIVE: "false"     # les requêtes hors zone sont transmises à 1.1.1.1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - demo-net
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: auth
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - demo-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── Auth-service (OIDC / OAuth2) ──────────────────────────────────────────
+  auth-service:
+    image: ghcr.io/circle-rd/auth-service:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development            # autorise les redirect_uri HTTP
+      PORT: "3001"
+      HOST: 0.0.0.0
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: http://auth.${DOMAIN}   # = issuer des JWT
+      DATABASE_URL: postgres://auth:${POSTGRES_PASSWORD}@postgres:5432/auth
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: auth
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CORS_ORIGINS: http://app.${DOMAIN}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)"
+      - "traefik.http.routers.auth.entrypoints=web"
+      - "traefik.http.services.auth.loadbalancer.server.port=3001"
+    networks:
+      - demo-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # ── Setup : provisionne l'application OAuth (s'exécute une seule fois) ────
+  setup:
+    build: ./webapp
+    restart: on-failure
+    command: node dist/setup.js
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    environment:
+      AUTH_SERVICE_INTERNAL_URL: http://auth-service:3001
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      APP_SLUG: ${APP_SLUG}
+      REDIRECT_URI: http://app.${DOMAIN}/callback
+    volumes:
+      - credentials:/shared
+    networks:
+      - demo-net
+
+  # ── Demo webapp ───────────────────────────────────────────────────────────
+  webapp:
+    build: ./webapp
+    restart: unless-stopped
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      AUTH_SERVICE_URL: http://auth.${DOMAIN}          # URL publique (issuer JWT + redirections)
+      AUTH_SERVICE_INTERNAL_URL: http://auth-service:3001  # URL interne (JWKS + échange token)
+      APP_SLUG: ${APP_SLUG}
+      REDIRECT_URI: http://app.${DOMAIN}/callback
+      PORT: "3000"
+    volumes:
+      - credentials:/shared
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webapp.rule=Host(`app.${DOMAIN}`)"
+      - "traefik.http.routers.webapp.entrypoints=web"
+      - "traefik.http.services.webapp.loadbalancer.server.port=3000"
+    networks:
+      - demo-net
