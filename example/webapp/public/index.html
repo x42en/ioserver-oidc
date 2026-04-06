@@ -184,7 +184,15 @@
       return res.json();
     }
 
-    function logout() {
+    async function logout() {
+      try {
+        await fetch(`${authServiceUrl}/api/auth/sign-out`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+      } catch {
+        // Ignore network errors — clear local state anyway
+      }
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       history.replaceState({}, '', '/');
