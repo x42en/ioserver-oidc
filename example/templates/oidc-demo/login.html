@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OIDC Demo — Sign in</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 1.75rem;
+    }
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .6rem;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 999px;
+      padding: .45rem 1rem .45rem .6rem;
+      color: #e0e7ff;
+      font-size: .875rem;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .logo-dot {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, #818cf8, #6366f1);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .8rem; font-weight: 700; color: #fff;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .35);
+      padding: 2.25rem 2rem;
+    }
+
+    h1 { font-size: 1.35rem; font-weight: 700; color: #0f172a; margin-bottom: .2rem; }
+    .subtitle { color: #64748b; font-size: .875rem; margin-bottom: 1.75rem; }
+
+    label { display: block; font-size: .8125rem; font-weight: 600; color: #334155;
+            margin-bottom: .3rem; }
+
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: .6rem .85rem;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: .95rem;
+      color: #0f172a;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+      margin-bottom: .9rem;
+    }
+    input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,.18);
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: .7rem;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+      margin-top: .35rem;
+      letter-spacing: .01em;
+    }
+    button[type="submit"]:hover { opacity: .9; }
+    button[type="submit"]:active { opacity: .8; }
+
+    .error {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: .55rem .85rem;
+      font-size: .85rem;
+      margin-bottom: 1rem;
+    }
+
+    .forgot {
+      display: block; text-align: right; font-size: .8rem; color: #6366f1;
+      text-decoration: none; margin-top: -.45rem; margin-bottom: .9rem;
+    }
+    .forgot:hover { text-decoration: underline; }
+
+    .footer {
+      text-align: center; font-size: .8125rem; color: #94a3b8;
+      margin-top: 1.25rem;
+    }
+    .footer a { color: #6366f1; text-decoration: none; font-weight: 600; }
+    .footer a:hover { text-decoration: underline; }
+
+    .divider {
+      border: none; border-top: 1px solid #f1f5f9;
+      margin: 1.5rem 0 1rem;
+    }
+    .powered {
+      text-align: center; font-size: .75rem; color: #cbd5e1;
+      margin-top: 1.5rem;
+    }
+    .powered span { font-weight: 600; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="logo">
+      <span class="logo-badge">
+        <span class="logo-dot">OD</span>
+        OIDC Demo App
+      </span>
+    </div>
+
+    <div class="card">
+      <h1>Sign in</h1>
+      <p class="subtitle">Enter your credentials to access the demo.</p>
+
+      {{#if ERROR_MESSAGE}}
+      <div class="error" id="error-box">{{ERROR_MESSAGE}}</div>
+      {{/if}}
+      <div class="error" id="error-box" style="display:none"></div>
+
+      <form id="login-form">
+        <input type="hidden" name="redirectTo"  value="{{REDIRECT_TO}}" />
+        <input type="hidden" name="oauthQuery"  value="{{OAUTH_QUERY}}" />
+
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email"
+               placeholder="you@example.com" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password"
+               autocomplete="current-password" placeholder="••••••••" required />
+
+        <a class="forgot" href="/forgot-password">Forgot password?</a>
+
+        <button type="submit">Sign in to OIDC Demo</button>
+      </form>
+
+      <hr class="divider" />
+
+      <p class="footer">
+        No account yet?
+        <a href="/register?redirectTo={{REDIRECT_TO}}">Create one</a>
+      </p>
+    </div>
+
+    <p class="powered">Secured by <span>auth-service</span></p>
+  </div>
+
+  <script type="module">
+    const form = document.getElementById('login-form');
+    const errorBox = document.getElementById('error-box');
+    const AUTH_URL = '{{AUTH_URL}}';
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.style.display = 'none';
+
+      const email      = form.email.value.trim();
+      const password   = form.password.value;
+      const redirectTo = form.redirectTo.value || '/';
+      const oauthQuery = form.oauthQuery.value;
+
+      try {
+        const body = { email, password, callbackURL: redirectTo };
+        if (oauthQuery) body.oauth_query = oauthQuery;
+
+        const res = await fetch(`${AUTH_URL}/api/auth/sign-in/email`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': window.location.origin,
+          },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data?.error?.message ?? 'Authentication failed.';
+          errorBox.style.display = 'block';
+          return;
+        }
+
+        if (data?.url) {
+          window.location.href = data.url;
+        } else if (redirectTo.startsWith('/api/') || redirectTo.startsWith('http')) {
+          window.location.href = redirectTo;
+        } else {
+          window.location.href = redirectTo || '/';
+        }
+      } catch {
+        errorBox.textContent = 'A network error occurred. Please try again.';
+        errorBox.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

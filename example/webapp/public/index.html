@@ -145,9 +145,14 @@
 
       sessionStorage.removeItem('pkce_verifier');
       sessionStorage.removeItem('pkce_state');
-      localStorage.setItem('access_token', data.access_token);
+      // BetterAuth emits an opaque access_token by default (JWT only when the
+      // `resource` parameter is set). The id_token is always a signed JWT and
+      // contains all user claims added by customIdTokenClaims — use it as the
+      // bearer token for /api/me JWT verification.
+      const jwtToken = data.id_token || data.access_token;
+      localStorage.setItem('access_token', jwtToken);
       if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
-      return data.access_token;
+      return jwtToken;
     }
 
     // ── Rafraîchissement silencieux du token ───────────────────────────────
@@ -163,9 +168,11 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error_description ?? data.error ?? `HTTP ${res.status}`);
 
-      localStorage.setItem('access_token', data.access_token);
+      // Use id_token (JWT) for subsequent API calls — see exchangeCode for rationale.
+      const jwtToken = data.id_token || data.access_token;
+      localStorage.setItem('access_token', jwtToken);
       if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
-      return data.access_token;
+      return jwtToken;
     }
 
     // ── Appel /api/me ──────────────────────────────────────────────────────
