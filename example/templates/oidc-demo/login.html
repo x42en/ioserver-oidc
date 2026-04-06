@@ -144,6 +144,10 @@
 
       <div class="error" id="error-box">{{ERROR_MESSAGE}}</div>
 
+      <form id="login-form">
+        <input type="hidden" name="redirectTo"  value="{{REDIRECT_TO}}" />
+        <input type="hidden" name="oauthQuery"  value="{{OAUTH_QUERY}}" />
+
         <label for="email">Email</label>
         <input id="email" name="email" type="email" autocomplete="email"
                placeholder="you@example.com" required />

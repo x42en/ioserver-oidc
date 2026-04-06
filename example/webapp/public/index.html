@@ -250,7 +250,7 @@
         showStatus('Échange du code OAuth en cours…');
         try {
           const token   = await exchangeCode(code, state);
-          history.replaceState({}, '', window.location.pathname);
+          history.replaceState({}, '', '/');
           const profile = await fetchProfile(token);
           showProfile(profile);
         } catch (e) {
