@@ -38,17 +38,32 @@ services:
     depends_on:
       upki-ca:
         condition: service_healthy
+      dns:
+        condition: service_started
+    dns:
+      - "${HOST_IP}"
     environment:
       UPKI_DATA_DIR: /data
       UPKI_CA_HOST: upki-ca
       UPKI_CA_SEED: ${PKI_SEED}
       UPKI_RA_HOST: 0.0.0.0
+      # Serve HTTPS so LEGO (Traefik) can reach the ACME CA server over TLS.
+      UPKI_RA_TLS: "true"
+      # DNS SANs embedded in the RA certificate (required by Go 1.15+ host validation).
+      UPKI_RA_SANS: "upki-ra"
     volumes:
       - upki-ra-data:/data
     networks:
       - demo-net
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
+      test:
+        - CMD-SHELL
+        - >
+          python -c "import urllib.request, ssl;
+          ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT);
+          ctx.check_hostname = False;
+          ctx.verify_mode = ssl.CERT_NONE;
+          urllib.request.urlopen('https://localhost:8000/api/v1/health', context=ctx)"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -61,16 +76,22 @@ services:
     depends_on:
       upki-ra:
         condition: service_healthy
-    command:
-      - --api.insecure=true
-      - --providers.docker=true
-      - --providers.docker.exposedByDefault=false
-      - --providers.docker.network=demo-net
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.upki.acme.caserver=http://upki-ra:8000/acme/directory
-      - --certificatesresolvers.upki.acme.storage=/acme/acme.json
-      - --certificatesresolvers.upki.acme.httpchallenge.entrypoint=web
+    dns:
+      - "${HOST_IP}"
+    # Inject the upki-ca root certificate into Alpine's trust store before
+    # starting Traefik so that LEGO (the built-in ACME client) accepts the
+    # HTTPS endpoint served by upki-ra.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cp /ra-data/ca.crt /usr/local/share/ca-certificates/upki-ca.crt
+        update-ca-certificates
+        exec traefik
+    environment:
+      # Pass the ACME email via env var since the static config file cannot
+      # expand Compose variable syntax.
+      TRAEFIK_CERTIFICATESRESOLVERS_UPKI_ACME_EMAIL: ${ADMIN_EMAIL}
     ports:
       - "80:80"
       - "443:443"
@@ -78,6 +99,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - acme:/acme
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      # Mount RA data volume (read-only) to access the CA cert for trust.
+      - upki-ra-data:/ra-data:ro
     networks:
       - demo-net
 
@@ -118,7 +142,7 @@ services:
 
   # ── Auth-service (OIDC / OAuth2) ──────────────────────────────────────────
   auth-service:
-    image: ghcr.io/circle-rd/auth-service:latest
+    image: ghcr.io/circle-rd/auth-service:nightly
     restart: unless-stopped
     depends_on:
       postgres:

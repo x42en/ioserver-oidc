@@ -1,0 +1,31 @@
+# Traefik v3 static configuration
+# Email for the ACME resolver is injected at runtime via the environment variable
+#   TRAEFIK_CERTIFICATESRESOLVERS_UPKI_ACME_EMAIL
+# (set in docker-compose.yml as ${ADMIN_EMAIL}).
+
+api:
+  insecure: true
+
+log:
+  level: INFO
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: demo-net
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+certificatesResolvers:
+  upki:
+    acme:
+      # ACME CA server — upki-ra serves HTTPS on port 8000.
+      caServer: https://upki-ra:8000/acme/directory
+      # acme.json is stored on the named 'acme' Docker volume.
+      storage: /acme/acme.json
+      httpChallenge:
+        entryPoint: web
