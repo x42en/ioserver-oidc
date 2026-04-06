@@ -57,7 +57,7 @@ services:
       - demo-net
     healthcheck:
       test:
-        - CMD-SHELL
+      - CMD-SHELL
         - >
           python -c "import urllib.request, ssl;
           ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT);

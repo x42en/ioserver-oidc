@@ -163,7 +163,7 @@
 
       <hr class="divider" />
 
-      <p class="footer">
+      <p class="footer" id="register-footer">
         No account yet?
         <a href="/register?redirectTo={{REDIRECT_TO}}">Create one</a>
       </p>
@@ -219,6 +219,10 @@
         errorBox.style.display = 'block';
       }
     });
+
+    if ('{{ALLOW_REGISTER}}' !== 'true') {
+      document.getElementById('register-footer')?.remove();
+    }
   </script>
 </body>
 </html>
