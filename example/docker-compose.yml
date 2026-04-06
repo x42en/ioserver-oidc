@@ -15,7 +15,7 @@ services:
 
   # ── PKI: Certificate Authority ────────────────────────────────────────────
   upki-ca:
-    image: ghcr.io/circle-rd/upki-ca:nightly
+    image: ghcr.io/circle-rd/upki-ca:latest
     restart: unless-stopped
     environment:
       UPKI_DATA_DIR: /data
@@ -33,7 +33,7 @@ services:
 
   # ── PKI: Registration Authority (ACME v2) ─────────────────────────────────
   upki-ra:
-    image: ghcr.io/circle-rd/upki-ra:nightly
+    image: ghcr.io/circle-rd/upki-ra:latest
     restart: unless-stopped
     depends_on:
       upki-ca:
@@ -142,7 +142,7 @@ services:
 
   # ── Auth-service (OIDC / OAuth2) ──────────────────────────────────────────
   auth-service:
-    image: ghcr.io/circle-rd/auth-service:nightly
+    image: ghcr.io/circle-rd/auth-service:latest
     restart: unless-stopped
     depends_on:
       postgres:
