@@ -27,8 +27,8 @@
         "version:patch": "pnpm version patch --no-git-tag-version",
         "version:minor": "pnpm version minor --no-git-tag-version",
         "version:major": "pnpm version major --no-git-tag-version",
-        "gpr-setup": "node scripts/gpr.js",
-        "gpr-restore": "node scripts/gpr-restore.js",
+        "gpr-setup": "node scripts/gpr.cjs",
+        "gpr-restore": "node scripts/gpr-restore.cjs",
         "prepublishOnly": "pnpm run build"
     },
     "keywords": [
