@@ -6,6 +6,9 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.ts"],
+    typecheck: {
+      tsconfig: "./tsconfig.test.json",
+    },
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
