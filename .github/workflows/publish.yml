@@ -87,15 +87,15 @@ jobs:
           name: dist
           path: dist/
 
-      # ── Token-based publish — remove once trusted publisher is active ──
-      - name: Publish to npm
-        run: npm publish --access public --ignore-scripts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # # ── Token-based publish — remove once trusted publisher is active ──
+      # - name: Publish to npm
+      #   run: npm publish --access public --ignore-scripts
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # ── Trusted publisher — uncomment after first publication ──────────
-      # - name: Publish to npm
-      #   run: NODE_AUTH_TOKEN="" npm publish --access public --provenance --ignore-scripts
+      - name: Publish to npm
+        run: NODE_AUTH_TOKEN="" npm publish --access public --provenance --ignore-scripts
 
   publish-gpr:
     name: Publish to GitHub Packages
