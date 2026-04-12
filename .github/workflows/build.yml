@@ -2,10 +2,10 @@
 # ioserver-oidc — CI
 #
 # Runs on every push and pull-request to main.
-# Only type-checks and builds — no test runner yet.
+# Type-checks, builds, lints and runs the full test suite.
 # ──────────────────────────────────────────────────────────────
 
-name: CI
+name: CI Build and Test
 
 on:
   push:
@@ -13,10 +13,16 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  PNPM_VERSION: '9'
+
 jobs:
-  typecheck:
-    name: Typecheck & build
+  build-test:
+    name: Build and Test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22.x, 24.x]
 
     steps:
       - name: Checkout
@@ -25,16 +31,26 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: latest
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build (tsc)
+      - name: Lint
+        run: pnpm run lint
+        continue-on-error: true
+
+      - name: Build
         run: pnpm run build
+
+      - name: Test
+        run: pnpm test
+        env:
+          CI: true
