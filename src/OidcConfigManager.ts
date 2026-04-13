@@ -75,6 +75,13 @@ export function buildConfig(): OidcConfig {
     ...(process.env["AUTH_SERVICE_ISSUER"]
       ? { issuer: process.env["AUTH_SERVICE_ISSUER"] }
       : {}),
+    // AUTH_SERVICE_AUDIENCE: the expected `aud` claim in JWT access tokens.
+    // Required when using @better-auth/oauth-provider (v1.5+) with the
+    // `resource` parameter (RFC 8707). Set to the public API base URL
+    // (e.g. "https://api.example.com"). Omit to fall back to appSlug.
+    ...(process.env["AUTH_SERVICE_AUDIENCE"]
+      ? { audience: process.env["AUTH_SERVICE_AUDIENCE"] }
+      : {}),
   };
 
   return base as OidcConfig;

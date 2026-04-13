@@ -59,11 +59,17 @@ export async function verifyOidcToken(
   const issuer = resolveIssuer(config);
   const keyset = getJwks(jwksUri);
 
+  // `audience` resolution:
+  //  - New @better-auth/oauth-provider (v1.5+): aud = `resource` URL sent
+  //    during the auth request (RFC 8707). Use config.audience (set via
+  //    AUTH_SERVICE_AUDIENCE env var).
+  //  - Legacy oidc-provider plugin: aud = client_id (= appSlug). Falls back
+  //    to config.appSlug when config.audience is not set.
+  const audience = config.audience ?? config.appSlug;
+
   const { payload } = await jose.jwtVerify(token, keyset, {
     issuer,
-    // Note: BetterAuth's OAuth provider puts the client_id (= appSlug) in
-    // the `aud` claim of access_tokens. We validate it here.
-    audience: config.appSlug,
+    audience,
   });
 
   const p = payload as Record<string, unknown>;

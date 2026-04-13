@@ -44,6 +44,24 @@ export interface OidcConfig {
    * Defaults to `<authServiceUrl>`.
    */
   readonly issuer?: string;
+
+  /**
+   * Expected `aud` (audience) claim in JWT access tokens.
+   *
+   * With `@better-auth/oauth-provider` (v1.5+), JWTs are only issued when
+   * the client sends a `resource` parameter (RFC 8707). The `aud` claim is
+   * set to that resource URL — NOT to the `client_id` / appSlug.
+   *
+   * Set this to the public base URL of the resource server (e.g. your API),
+   * matching the `resource` the frontend sends and the `validAudiences` the
+   * auth-service advertises.
+   *
+   * When omitted, falls back to `appSlug` for backward compatibility with
+   * the legacy `oidc-provider` plugin.
+   *
+   * Example: "https://api.example.com"
+   */
+  readonly audience?: string;
 }
 
 // ─── User context ────────────────────────────────────────────
