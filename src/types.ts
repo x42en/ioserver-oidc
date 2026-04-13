@@ -111,4 +111,10 @@ export interface OidcUserContext {
    * user has no active subscription.
    */
   features: OidcFeatures;
+
+  /**
+   * Active organization ID from the `org_id` JWT claim.
+   * Present when the `org` scope was requested and the user has an active organization.
+   */
+  org_id?: string;
 }

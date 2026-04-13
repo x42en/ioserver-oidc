@@ -117,6 +117,9 @@ export class OidcHttpMiddleware extends BaseMiddleware {
       (request as Record<string, unknown>)["roles"] = oidcCtx.roles;
       (request as Record<string, unknown>)["permissions"] = oidcCtx.permissions;
       (request as Record<string, unknown>)["features"] = oidcCtx.features;
+      if (oidcCtx.org_id !== undefined) {
+        (request as Record<string, unknown>)["org_id"] = oidcCtx.org_id;
+      }
     };
   }
 

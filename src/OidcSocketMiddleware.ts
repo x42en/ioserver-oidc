@@ -108,6 +108,9 @@ export class OidcSocketMiddleware extends BaseMiddleware {
       socket.roles = oidcCtx.roles;
       socket.permissions = oidcCtx.permissions;
       socket.features = oidcCtx.features;
+      if (oidcCtx.org_id !== undefined) {
+        socket.org_id = oidcCtx.org_id;
+      }
 
       // ── 6. Register with session manager (if available) ──────────────
       if (typeof appHandle["session"]?.registerSocket === "function") {

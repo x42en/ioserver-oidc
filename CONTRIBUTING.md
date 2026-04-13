@@ -9,6 +9,7 @@ Thank you for your interest in contributing to ioserver-oidc! This document cove
 - [Architecture rules](#architecture-rules)
   - [Component model](#component-model)
   - [TypeScript requirements](#typescript-requirements)
+  - [Development standards](#development-standards)
   - [Naming conventions](#naming-conventions)
 - [Test suite](#test-suite)
   - [Running tests](#running-tests)
@@ -74,6 +75,17 @@ Rules:
 - All exported functions and class methods must have explicit return types
 - The `OidcConfig` interface is the single source of truth for configuration shape — add new options there first, then propagate to `buildConfig()` and the middlewares
 - Tests use `tsconfig.test.json` which extends the base config with looser `module`/`moduleResolution` settings to support top-level `await` in test files
+
+### Development standards
+
+- **Language**: All code (source, comments, documentation, interfaces, variable/function names) must be written in **English**. No exceptions.
+- **Single responsibility**: Each class must have one clear responsibility. Prefer multiple small focused classes over a single large one.
+- **File size**:
+  - Target: **≤ 500 lines** per file
+  - Allowed exception: up to **1 000 lines** for complex business logic where further splitting would harm readability
+  - Documentation files (`.md`) have no hard limit but should remain concise
+- **No implicit `any`**: Enforced by `strict` + `noImplicitAny`. Every exported symbol must be fully typed; use `unknown` with type-guards at boundaries.
+- **PR hygiene**: Zero TypeScript errors and zero ESLint warnings before opening a pull request.
 
 ### Naming conventions
 

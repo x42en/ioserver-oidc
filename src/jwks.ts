@@ -91,7 +91,9 @@ export async function verifyOidcToken(
   // Primary role: first element of the roles array, fallback "user"
   const userRole = roles[0] ?? "user";
 
-  return {
+  const org_id = typeof p["org_id"] === "string" ? p["org_id"] : undefined;
+
+  const ctx: OidcUserContext = {
     userId: sub, // will be replaced by DB id after findOrCreate in middleware
     sub,
     email: typeof p["email"] === "string" ? p["email"] : null,
@@ -101,4 +103,6 @@ export async function verifyOidcToken(
     permissions,
     features,
   };
+  if (org_id !== undefined) ctx.org_id = org_id;
+  return ctx;
 }
