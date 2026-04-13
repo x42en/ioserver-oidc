@@ -82,4 +82,24 @@ describe("buildConfig()", () => {
     expect(config.jwksUri).toBe("https://cdn.example.com/jwks");
     expect(config.issuer).toBe("https://issuer.example.com");
   });
+
+  it("audience is undefined when AUTH_SERVICE_AUDIENCE is not set", () => {
+    process.env["AUTH_SERVICE_URL"] = "https://auth.example.com";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+    delete process.env["AUTH_SERVICE_AUDIENCE"];
+
+    const config = buildConfig();
+
+    expect(config.audience).toBeUndefined();
+  });
+
+  it("includes audience override when AUTH_SERVICE_AUDIENCE is set", () => {
+    process.env["AUTH_SERVICE_URL"] = "https://auth.example.com";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+    process.env["AUTH_SERVICE_AUDIENCE"] = "https://api.example.com";
+
+    const config = buildConfig();
+
+    expect(config.audience).toBe("https://api.example.com");
+  });
 });

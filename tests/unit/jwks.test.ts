@@ -158,4 +158,35 @@ describe("jwks — verifyOidcToken()", () => {
 
     await expect(verifyOidcToken("tok", baseConfig)).rejects.toThrow("JWTExpired");
   });
+
+  it("uses config.audience when set (RFC 8707 resource URL)", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", roles: [], permissions: [], features: {} },
+    });
+
+    await verifyOidcToken("tok", {
+      ...baseConfig,
+      audience: "https://api.example.com",
+    });
+
+    expect(mockJwtVerify).toHaveBeenCalledWith(
+      "tok",
+      expect.anything(),
+      expect.objectContaining({ audience: "https://api.example.com" }),
+    );
+  });
+
+  it("falls back to appSlug as audience when config.audience is not set", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", roles: [], permissions: [], features: {} },
+    });
+
+    await verifyOidcToken("tok", baseConfig);
+
+    expect(mockJwtVerify).toHaveBeenCalledWith(
+      "tok",
+      expect.anything(),
+      expect.objectContaining({ audience: "my-app" }),
+    );
+  });
 });
