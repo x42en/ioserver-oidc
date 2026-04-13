@@ -1,6 +1,6 @@
 {
     "name": "ioserver-oidc",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "description": "IOServer middleware set for OIDC/OAuth2 JWT authentication via JWKS (auth-service compatible)",
     "type": "module",
     "main": "./dist/index.js",
