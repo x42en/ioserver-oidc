@@ -62,6 +62,18 @@ export interface OidcConfig {
    * Example: "https://api.example.com"
    */
   readonly audience?: string;
+
+  /**
+   * Allow-list of JWS algorithms accepted when verifying the token signature.
+   *
+   * Defaults to the set of asymmetric algorithms commonly emitted by
+   * auth-service / BetterAuth (`RS*`, `PS*`, `ES*`, `EdDSA`). Symmetric
+   * algorithms (`HS*`) and `none` are intentionally excluded to prevent
+   * algorithm-confusion attacks.
+   *
+   * Override only if your issuer signs with a specific, narrower set.
+   */
+  readonly algorithms?: readonly string[];
 }
 
 // ─── User context ────────────────────────────────────────────

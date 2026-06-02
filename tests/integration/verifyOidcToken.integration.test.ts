@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer, type Server } from "node:http";
+import { TextEncoder } from "node:util";
 import * as jose from "jose";
 import { verifyOidcToken } from "../../src/jwks.js";
 import type { OidcConfig } from "../../src/types.js";
@@ -62,9 +63,7 @@ async function signToken(
     .setProtectedHeader({ alg: "RS256", kid: "test-key-1" })
     .setIssuedAt()
     .setIssuer(options.issuer ?? ISSUER)
-    .setAudience(options.audience ?? APP_SLUG);
-
-  if (options.expiresAt !== undefined) {
+    .setAudience(options.audience ?? APP_SLUG);  if (options.expiresAt !== undefined) {
     builder.setExpirationTime(options.expiresAt);
   } else if (options.expiresIn !== undefined) {
     builder.setExpirationTime(options.expiresIn);
@@ -135,5 +134,72 @@ describe("verifyOidcToken() — integration (real RSA JWKS)", () => {
     );
 
     await expect(verifyOidcToken(token, config)).rejects.toThrow();
+  });
+
+  it("accepts a token whose azp matches appSlug", async () => {
+    const token = await signToken({ sub: "user-azp", azp: APP_SLUG });
+
+    const ctx = await verifyOidcToken(token, config);
+    expect(ctx.sub).toBe("user-azp");
+  });
+
+  it("rejects a cross-app token (azp does not match appSlug)", async () => {
+    // Token legitimately minted for another application sharing the same
+    // issuer — must NOT be accepted here, even though iss/aud verify.
+    const token = await signToken({
+      sub: "attacker",
+      azp: "another-app",
+      roles: ["admin"],
+    });
+
+    await expect(verifyOidcToken(token, config)).rejects.toThrow(
+      /authorized party/i,
+    );
+  });
+
+  it("rejects a token signed with a non-allow-listed algorithm (HS256)", async () => {
+    // Algorithm-confusion attempt: sign an HS256 token using the issuer's
+    // PUBLIC key bytes as the HMAC secret. Must be rejected by the allow-list.
+    const pubJwk = await jose.exportJWK(publicKey);
+    const secret = new TextEncoder().encode(JSON.stringify(pubJwk));
+    const hsToken = await new jose.SignJWT({ sub: "attacker", roles: ["admin"] })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setIssuer(ISSUER)
+      .setAudience(APP_SLUG)
+      .setExpirationTime("1h")
+      .sign(secret);
+
+    await expect(verifyOidcToken(hsToken, config)).rejects.toThrow();
+  });
+
+  it("requires an azp claim in resource-audience mode (RFC 8707)", async () => {
+    const resourceConfig: OidcConfig = {
+      ...config,
+      audience: "https://api.test.local",
+    };
+    // No azp present, aud = resource URL → token cannot be bound to the app.
+    const token = await signToken(
+      { sub: "user-1", roles: ["admin"] },
+      { audience: "https://api.test.local" },
+    );
+
+    await expect(verifyOidcToken(token, resourceConfig)).rejects.toThrow(
+      /authorized party/i,
+    );
+  });
+
+  it("accepts a resource-audience token carrying a matching azp", async () => {
+    const resourceConfig: OidcConfig = {
+      ...config,
+      audience: "https://api.test.local",
+    };
+    const token = await signToken(
+      { sub: "user-ok", azp: APP_SLUG },
+      { audience: "https://api.test.local" },
+    );
+
+    const ctx = await verifyOidcToken(token, resourceConfig);
+    expect(ctx.sub).toBe("user-ok");
   });
 });

@@ -4,9 +4,26 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockJwtVerify = vi.fn();
 const mockCreateRemoteJWKSet = vi.fn();
 
+class JWTClaimValidationFailed extends Error {
+  claim?: string;
+  reason?: string;
+  constructor(
+    message: string,
+    _payload: unknown,
+    claim?: string,
+    reason?: string,
+  ) {
+    super(message);
+    this.name = "JWTClaimValidationFailed";
+    this.claim = claim;
+    this.reason = reason;
+  }
+}
+
 vi.mock("jose", () => ({
   jwtVerify: mockJwtVerify,
   createRemoteJWKSet: mockCreateRemoteJWKSet,
+  errors: { JWTClaimValidationFailed },
 }));
 
 // Import AFTER mock is registered
@@ -161,7 +178,13 @@ describe("jwks — verifyOidcToken()", () => {
 
   it("uses config.audience when set (RFC 8707 resource URL)", async () => {
     mockJwtVerify.mockResolvedValue({
-      payload: { sub: "user-1", roles: [], permissions: [], features: {} },
+      payload: {
+        sub: "user-1",
+        azp: "my-app",
+        roles: [],
+        permissions: [],
+        features: {},
+      },
     });
 
     await verifyOidcToken("tok", {
@@ -188,5 +211,128 @@ describe("jwks — verifyOidcToken()", () => {
       expect.anything(),
       expect.objectContaining({ audience: "my-app" }),
     );
+  });
+
+  // ── Algorithm allow-list (FINDING-4) ──────────────────────────────────────
+
+  it("pins an asymmetric algorithm allow-list by default (excludes HS*/none)", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", roles: [], permissions: [], features: {} },
+    });
+
+    await verifyOidcToken("tok", baseConfig);
+
+    const opts = mockJwtVerify.mock.calls[0]?.[2] as { algorithms: string[] };
+    expect(opts.algorithms).toEqual(
+      expect.arrayContaining(["RS256", "ES256", "EdDSA"]),
+    );
+    expect(opts.algorithms).not.toContain("HS256");
+    expect(opts.algorithms).not.toContain("none");
+  });
+
+  it("uses config.algorithms override when provided", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", roles: [], permissions: [], features: {} },
+    });
+
+    await verifyOidcToken("tok", { ...baseConfig, algorithms: ["ES256"] });
+
+    expect(mockJwtVerify).toHaveBeenCalledWith(
+      "tok",
+      expect.anything(),
+      expect.objectContaining({ algorithms: ["ES256"] }),
+    );
+  });
+
+  // ── Authorized-party binding (FINDING-1) ──────────────────────────────────
+
+  it("accepts a token whose azp matches appSlug", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "my-app", roles: [], permissions: [] },
+    });
+
+    const ctx = await verifyOidcToken("tok", baseConfig);
+    expect(ctx.sub).toBe("user-1");
+  });
+
+  it("rejects a token whose azp does not match appSlug (cross-app token)", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "other-app", roles: ["admin"] },
+    });
+
+    await expect(verifyOidcToken("tok", baseConfig)).rejects.toThrow(
+      /authorized party/i,
+    );
+  });
+
+  it("accepts client_id as authorized party fallback when azp is absent", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", client_id: "my-app", roles: [] },
+    });
+
+    const ctx = await verifyOidcToken("tok", baseConfig);
+    expect(ctx.sub).toBe("user-1");
+  });
+
+  it("rejects a non-matching client_id when azp is absent", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", client_id: "other-app", roles: ["admin"] },
+    });
+
+    await expect(verifyOidcToken("tok", baseConfig)).rejects.toThrow(
+      /authorized party/i,
+    );
+  });
+
+  it("allows a missing party claim in legacy audience mode (aud = appSlug)", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", roles: [], permissions: [] },
+    });
+
+    const ctx = await verifyOidcToken("tok", baseConfig);
+    expect(ctx.sub).toBe("user-1");
+  });
+
+  it("requires a party claim in resource-audience mode (RFC 8707)", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", roles: ["admin"] },
+    });
+
+    await expect(
+      verifyOidcToken("tok", {
+        ...baseConfig,
+        audience: "https://api.example.com",
+      }),
+    ).rejects.toThrow(/authorized party/i);
+  });
+
+  it("accepts matching azp in resource-audience mode", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "my-app", roles: [] },
+    });
+
+    const ctx = await verifyOidcToken("tok", {
+      ...baseConfig,
+      audience: "https://api.example.com",
+    });
+    expect(ctx.sub).toBe("user-1");
+  });
+
+  // ── Strict claim element validation (FINDING-6) ───────────────────────────
+
+  it("filters out non-string elements from roles and permissions", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: {
+        sub: "user-1",
+        roles: ["admin", 123, null, { x: 1 }, "user"],
+        permissions: ["read", 42, "write", false],
+      },
+    });
+
+    const ctx = await verifyOidcToken("tok", baseConfig);
+
+    expect(ctx.roles).toEqual(["admin", "user"]);
+    expect(ctx.permissions).toEqual(["read", "write"]);
+    expect(ctx.userRole).toBe("admin");
   });
 });

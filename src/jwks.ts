@@ -42,11 +42,30 @@ function getJwks(jwksUri: string): ReturnType<typeof jose.createRemoteJWKSet> {
 }
 
 /**
+ * Default allow-list of asymmetric JWS algorithms.
+ * Symmetric (`HS*`) and `none` are excluded to prevent algorithm-confusion.
+ */
+const DEFAULT_ALGORITHMS = [
+  "RS256",
+  "RS384",
+  "RS512",
+  "PS256",
+  "PS384",
+  "PS512",
+  "ES256",
+  "ES384",
+  "ES512",
+  "EdDSA",
+] as const;
+
+/**
  * Verify an OIDC/OAuth2 JWT access token issued by auth-service.
  *
  * 1. Resolves the JWKS URI and issuer from `config`.
- * 2. Verifies the RS/EC signature against the cached remote JWKS.
- * 3. Validates `iss`, expiry, `azp` (authorized party) against `appSlug`.
+ * 2. Verifies the RS/EC signature against the cached remote JWKS, restricting
+ *    accepted algorithms to an asymmetric allow-list.
+ * 3. Validates `iss`, expiry, `aud`, and the authorized party
+ *    (`azp` / `client_id`) against `appSlug`.
  * 4. Maps standard + custom claims to `OidcUserContext`.
  *
  * Throws a `jose` `JWTVerifyError` (or subclass) on any failure.
@@ -70,17 +89,67 @@ export async function verifyOidcToken(
   const { payload } = await jose.jwtVerify(token, keyset, {
     issuer,
     audience,
+    algorithms: (config.algorithms as string[] | undefined) ?? [
+      ...DEFAULT_ALGORITHMS,
+    ],
   });
 
   const p = payload as Record<string, unknown>;
 
+  // ── Authorized-party binding (confused-deputy / cross-app defence) ────────
+  //
+  // auth-service hosts many applications over a SHARED user pool, and the
+  // `roles` / `permissions` claims are scoped PER APPLICATION. When the
+  // audience is a shared resource URL (RFC 8707 mode), the `aud` claim no
+  // longer distinguishes the issuing client — a token minted for app B would
+  // otherwise be accepted by app A and grant app-B-scoped privileges here.
+  //
+  // We therefore bind the token to this application via the authorized party:
+  //   - `azp` (OIDC) or `client_id` (OAuth2) MUST equal `appSlug` when present.
+  //   - In resource-audience mode, the party claim MUST be present.
+  const authorizedParty =
+    typeof p["azp"] === "string"
+      ? (p["azp"] as string)
+      : typeof p["client_id"] === "string"
+        ? (p["client_id"] as string)
+        : undefined;
+
+  const audienceIsResource =
+    config.audience !== undefined && config.audience !== config.appSlug;
+
+  if (authorizedParty === undefined) {
+    if (audienceIsResource) {
+      throw new jose.errors.JWTClaimValidationFailed(
+        'missing "azp" (authorized party) claim',
+        payload,
+        "azp",
+        "missing",
+      );
+    }
+  } else if (authorizedParty !== config.appSlug) {
+    throw new jose.errors.JWTClaimValidationFailed(
+      'unexpected "azp" (authorized party) claim',
+      payload,
+      "azp",
+      "check_failed",
+    );
+  }
+
   // `sub` is guaranteed by jwtVerify (it checks for its presence)
   const sub = payload.sub as string;
 
-  const roles = Array.isArray(p["roles"]) ? (p["roles"] as string[]) : [];
+  // Strictly keep only string elements — a malformed claim (e.g. numbers or
+  // objects) must not leak into role/permission checks downstream.
+  const roles = Array.isArray(p["roles"])
+    ? (p["roles"] as unknown[]).filter(
+        (r): r is string => typeof r === "string",
+      )
+    : [];
 
   const permissions = Array.isArray(p["permissions"])
-    ? (p["permissions"] as string[])
+    ? (p["permissions"] as unknown[]).filter(
+        (x): x is string => typeof x === "string",
+      )
     : [];
 
   const features: OidcFeatures =
