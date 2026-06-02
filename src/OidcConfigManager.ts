@@ -21,6 +21,7 @@ import type { OidcConfig } from "./types.js";
  * Optional environment variables:
  *   AUTH_SERVICE_JWKS_URI  — Override the JWKS URI (default: <AUTH_SERVICE_URL>/api/auth/jwks)
  *   AUTH_SERVICE_ISSUER    — Override the JWT issuer (default: AUTH_SERVICE_URL)
+ *   AUTH_SERVICE_AUDIENCE  — Expected `aud` claim, RFC 8707 resource mode (default: AUTH_SERVICE_APP_SLUG)
  */
 export class OidcConfigManager extends BaseManager {
   private _config: OidcConfig | null = null;

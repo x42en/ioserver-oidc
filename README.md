@@ -37,8 +37,8 @@
 
 ## Features
 
-- ✅ Verifies RS256 / ES256 JWT access tokens via **remote JWKS** (no secret distribution)
-- ✅ Validates `iss`, `aud`, and expiry claims
+- ✅ Verifies RS256/384/512, PS256/384/512, ES256/384/512, and EdDSA JWT access tokens via **remote JWKS** (no secret distribution)
+- ✅ Validates `iss`, `aud`, `azp` (authorized party), and expiry claims
 - ✅ In-process JWKS **key cache** — one HTTP round-trip per key rotation
 - ✅ Auto-provisions local user records via `appHandle.users.findOrCreate(...)`
 - ✅ Rejects disabled accounts (403)
@@ -150,6 +150,7 @@ socket.on("ping", () => {
 | `AUTH_SERVICE_APP_SLUG` | ✅       | —                                  | OAuth2 `client_id` / app slug registered in auth-service              |
 | `AUTH_SERVICE_JWKS_URI` | ❌       | `<AUTH_SERVICE_URL>/api/auth/jwks` | Override the JWKS endpoint                                            |
 | `AUTH_SERVICE_ISSUER`   | ❌       | `<AUTH_SERVICE_URL>`               | Override the expected `iss` claim                                     |
+| `AUTH_SERVICE_AUDIENCE` | ❌       | `<AUTH_SERVICE_APP_SLUG>`          | Expected `aud` claim (RFC 8707 resource mode); enables `azp` enforcement |
 
 All variables are read **once** at server startup by `OidcConfigManager.start()`.  
 If `OidcConfigManager` is not registered, each middleware reads the same
@@ -181,7 +182,7 @@ every inbound Fastify request.
 **Flow:**
 
 1. Extracts the Bearer token from `Authorization` header
-2. Verifies JWT signature via JWKS (`iss` + `aud` + expiry)
+2. Verifies JWT signature via JWKS (`iss` + `aud` + `azp` + expiry), restricted to an asymmetric algorithm allow-list
 3. Calls `appHandle.users.findOrCreate(sub, { email, name })` if available
 4. Rejects disabled accounts with `403`
 5. Injects auth context onto the request object
@@ -200,7 +201,7 @@ Token is read from (in order):
 1. `socket.handshake.auth.token` — preferred, set by the Vue/web client
 2. `socket.handshake.headers.authorization` (`Bearer` prefix) — fallback
 
-Calls `appHandle.session.registerSocket(userId, socketId, sub)` when the
+Calls `appHandle.session.registerSocket(socket, namespace, email, name)` when the
 session manager is available.
 
 **Rejects** with `new Error("ERR_AUTH_TOKEN_REQUIRED")` or
@@ -248,9 +249,11 @@ import type { OidcConfig, OidcUserContext, OidcFeatures } from "ioserver-oidc";
 ```ts
 interface OidcConfig {
   authServiceUrl: string; // e.g. "https://auth.example.com"
-  appSlug: string; // OAuth2 client_id (= app slug)
+  appSlug: string; // OAuth2 client_id (= app slug); validated against `azp`
   jwksUri?: string; // Override JWKS endpoint
   issuer?: string; // Override expected `iss` claim
+  audience?: string; // Expected `aud` (RFC 8707 resource mode); defaults to appSlug
+  algorithms?: readonly string[]; // JWS algorithm allow-list; defaults to asymmetric only
 }
 ```
 
@@ -266,6 +269,7 @@ interface OidcUserContext {
   roles: string[];
   permissions: string[];
   features: OidcFeatures; // Record<string, unknown>
+  org_id?: string; // Active organization ID (when `org` scope requested)
 }
 ```
 
@@ -283,6 +287,7 @@ After successful authentication the following properties are available:
 | `roles`       | `string[]`               | JWT `roles` claim       |
 | `permissions` | `string[]`               | JWT `permissions` claim |
 | `features`    | `Record<string,unknown>` | JWT `features` claim    |
+| `org_id`      | `string`                 | JWT `org_id` claim (when present) |
 
 In TypeScript, cast the Fastify `request` or Socket.IO `socket` to `any` (or
 augment the types in your app) to access these properties.
@@ -295,7 +300,7 @@ augment the types in your app) to access these properties.
 | --------------------------- | ------------- | ------------------------------------------ |
 | `ERR_AUTH_TOKEN_REQUIRED`   | 401 / reject  | No `Authorization` header or auth token    |
 | `ERR_AUTH_TOKEN_INVALID`    | 401 / reject  | JWT signature / claims verification failed |
-| `ERR_USER_DISABLED`         | 403           | User account is disabled in the local DB   |
+| `ERR_ACCOUNT_DISABLED`      | 403           | User account is disabled in the local DB   |
 | `ERR_USER_PROVISION_FAILED` | 500           | `findOrCreate` threw an error              |
 | `ERR_FORBIDDEN`             | — / reject    | User lacks the required role               |
 
@@ -308,9 +313,15 @@ augment the types in your app) to access these properties.
 - JWKS keys are fetched lazily and cached per URI. The `jose` library
   automatically re-fetches keys on signature verification failure (key rotation)
   with a minimum 5-minute cooldown.
-- The `aud` (audience) claim is always validated against `OidcConfig.appSlug`
-  to prevent token substitution attacks between different applications sharing
-  the same auth-service instance.
+- The token signature is verified against an **asymmetric algorithm
+  allow-list** (`RS*`, `PS*`, `ES*`, `EdDSA`). Symmetric algorithms (`HS*`)
+  and `none` are rejected to prevent algorithm-confusion attacks.
+- The `aud` (audience) claim is always validated — against `OidcConfig.appSlug`
+  by default, or against `OidcConfig.audience` (a resource URL) in RFC 8707
+  mode.
+- The `azp` (authorized party) claim is bound to `OidcConfig.appSlug` to prevent
+  token substitution between different applications sharing the same
+  auth-service instance. In resource-audience mode the claim is **mandatory**.
 - The `iss` (issuer) claim is validated against `OidcConfig.authServiceUrl`
   (or the explicit override).
 

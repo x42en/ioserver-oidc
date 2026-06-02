@@ -26,7 +26,7 @@ GitHub
 What it does
 
 #features
-::::u-page-feature{icon="i-lucide-shield-check" title="JWT verification via JWKS" description="RS256/ES256 tokens are verified against your auth-service's public key set. Keys are fetched once and cached in-process; rotation is handled automatically by jose."}
+::::u-page-feature{icon="i-lucide-shield-check" title="JWT verification via JWKS" description="RS256/384/512, PS256/384/512, ES256/384/512 and EdDSA tokens are verified against your auth-service's public key set. Keys are fetched once and cached in-process; rotation is handled automatically by jose."}
 ::::
 
 ::::u-page-feature{icon="i-lucide-zap" title="HTTP and WebSocket in one package" description="OidcHttpMiddleware guards Fastify routes. OidcSocketMiddleware guards Socket.IO namespaces. Both follow the exact same token flow and inject the same user context."}
