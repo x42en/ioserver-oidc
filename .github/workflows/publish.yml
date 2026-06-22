@@ -4,9 +4,7 @@
 # Triggers when a GitHub Release is published.
 # Builds the TypeScript package and publishes to npmjs.
 #
-# Current auth: NPM_TOKEN secret (Settings → Secrets → Actions)
-# TODO: once the first publication is done, switch to trusted
-#       publisher by uncommenting id-token and the provenance step.
+# npmjs publishing uses npm trusted publishing (GitHub OIDC).
 # ──────────────────────────────────────────────────────────────
 
 name: Release package
@@ -18,7 +16,7 @@ on:
 permissions:
   contents: write
   packages: write
-  # id-token: write  # Uncomment to enable OIDC trusted publisher
+  id-token: write
 
 env:
   PNPM_VERSION: '9'
@@ -87,9 +85,8 @@ jobs:
           name: dist
           path: dist/
 
-      # ── Trusted publisher — uncomment after first publication ──────────
       - name: Publish to npm
-        run: NODE_AUTH_TOKEN="" npm publish --access public --provenance --ignore-scripts
+        run: npm publish --access public --provenance --ignore-scripts
 
   publish-gpr:
     name: Publish to GitHub Packages
