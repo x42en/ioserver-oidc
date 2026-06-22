@@ -1,6 +1,13 @@
 import { BaseMiddleware } from "ioserver";
 import type { AppHandle } from "ioserver";
 
+type SocketNext = (err?: Error) => void;
+
+interface AdminSocketLike {
+  roles?: unknown;
+  userRole?: unknown;
+}
+
 /**
  * OidcSocketAdminMiddleware — Role guard for admin-only Socket.IO namespaces.
  *
@@ -21,9 +28,9 @@ import type { AppHandle } from "ioserver";
  */
 export class OidcSocketAdminMiddleware extends BaseMiddleware {
   handle(_appHandle: AppHandle) {
-    return (socket: any, next: (err?: Error) => void) => {
+    return (socket: AdminSocketLike, next: SocketNext) => {
       const roles: string[] = Array.isArray(socket.roles)
-        ? socket.roles
+        ? socket.roles.filter((role): role is string => typeof role === "string")
         : typeof socket.userRole === "string"
           ? [socket.userRole]
           : [];

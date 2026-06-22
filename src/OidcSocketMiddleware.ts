@@ -4,6 +4,31 @@ import { verifyOidcToken } from "./jwks.js";
 import { buildConfig } from "./OidcConfigManager.js";
 import type { OidcConfig } from "./types.js";
 
+type SocketNext = (err?: Error) => void;
+
+interface SocketLike {
+  handshake?: {
+    auth?: {
+      token?: unknown;
+    };
+    headers?: {
+      authorization?: unknown;
+    };
+  };
+  nsp?: {
+    name?: string;
+  };
+  id: string;
+  on(event: "disconnect", listener: () => void): void;
+  sub?: string;
+  userId?: string;
+  userRole?: string;
+  roles?: string[];
+  permissions?: unknown;
+  features?: unknown;
+  org_id?: unknown;
+}
+
 /**
  * OidcSocketMiddleware — Verifies OIDC/OAuth2 JWT access tokens on Socket.IO namespaces.
  *
@@ -37,22 +62,24 @@ export class OidcSocketMiddleware extends BaseMiddleware {
   private _config: OidcConfig | null = null;
 
   handle(appHandle: AppHandle) {
-    return async (socket: any, next: (err?: Error) => void) => {
+    return async (socket: SocketLike, next: SocketNext) => {
       // ── 1. Resolve config (lazy, cached) ──────────────────────────────
       if (!this._config) {
         this._config = this._resolveConfig(appHandle);
       }
 
       // ── 2. Extract token ───────────────────────────────────────────────
-      let token: string | undefined = socket.handshake?.auth?.token as
-        | string
-        | undefined;
+      let token: string | undefined =
+        typeof socket.handshake?.auth?.token === "string"
+          ? socket.handshake.auth.token
+          : undefined;
 
       if (!token) {
-        const authHeader = socket.handshake?.headers?.authorization as
-          | string
-          | undefined;
-        if (authHeader?.startsWith("Bearer ")) {
+        const authHeader = socket.handshake?.headers?.authorization;
+        if (
+          typeof authHeader === "string" &&
+          authHeader.startsWith("Bearer ")
+        ) {
           token = authHeader.slice(7);
         }
       }

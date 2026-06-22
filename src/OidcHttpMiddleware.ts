@@ -4,6 +4,17 @@ import { verifyOidcToken } from "./jwks.js";
 import { buildConfig } from "./OidcConfigManager.js";
 import type { OidcConfig } from "./types.js";
 
+interface HttpRequestLike extends Record<string, unknown> {
+  headers: {
+    authorization?: string;
+  };
+}
+
+interface HttpReplyLike {
+  code(statusCode: number): HttpReplyLike;
+  send(payload: unknown): void;
+}
+
 /**
  * OidcHttpMiddleware — Verifies OIDC/OAuth2 JWT access tokens on HTTP routes.
  *
@@ -36,7 +47,7 @@ export class OidcHttpMiddleware extends BaseMiddleware {
   private _config: OidcConfig | null = null;
 
   handle(appHandle: AppHandle) {
-    return async (request: any, reply: any) => {
+    return async (request: HttpRequestLike, reply: HttpReplyLike) => {
       // ── 1. Resolve config (lazy, cached after first call) ─────────────
       if (!this._config) {
         this._config = this._resolveConfig(appHandle);
@@ -110,15 +121,14 @@ export class OidcHttpMiddleware extends BaseMiddleware {
       }
 
       // ── 5. Inject auth context ────────────────────────────────────────
-      (request as Record<string, unknown>)["sub"] = oidcCtx.sub;
-      (request as Record<string, unknown>)["userId"] = user?.id ?? oidcCtx.sub;
-      (request as Record<string, unknown>)["userRole"] =
-        user?.role ?? oidcCtx.userRole;
-      (request as Record<string, unknown>)["roles"] = oidcCtx.roles;
-      (request as Record<string, unknown>)["permissions"] = oidcCtx.permissions;
-      (request as Record<string, unknown>)["features"] = oidcCtx.features;
+      request["sub"] = oidcCtx.sub;
+      request["userId"] = user?.id ?? oidcCtx.sub;
+      request["userRole"] = user?.role ?? oidcCtx.userRole;
+      request["roles"] = oidcCtx.roles;
+      request["permissions"] = oidcCtx.permissions;
+      request["features"] = oidcCtx.features;
       if (oidcCtx.org_id !== undefined) {
-        (request as Record<string, unknown>)["org_id"] = oidcCtx.org_id;
+        request["org_id"] = oidcCtx.org_id;
       }
     };
   }
