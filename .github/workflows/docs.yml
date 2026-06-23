@@ -49,4 +49,4 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             NUXT_APP_BASE_URL=/ioserver-oidc/
-            NUXT_SITE_URL=https://docs.circle-cyber.com/ioserver-oidc
+            NUXT_SITE_URL=https://docs.circle-cyber.com

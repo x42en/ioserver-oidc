@@ -6,6 +6,13 @@ export default defineNuxtConfig({
   site: {
     url: process.env.NUXT_SITE_URL ?? "https://docs.circle-cyber.com/ioserver-oidc",
   },
+  robots: { robotsTxt: false },
+  meta: {
+    title: "IOServer OIDC",
+    description:
+      "Drop-in OIDC/OAuth2 JWT middleware set for IOServer. Protects Fastify HTTP routes and Socket.IO namespaces via remote JWKS.",
+    ogHost: process.env.NUXT_SITE_URL ?? "https://docs.circle-cyber.com/ioserver-oidc",
+  },
   llms: {
     title: "IOServer OIDC",
     description:
