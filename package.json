@@ -3,6 +3,10 @@
     "version": "0.2.2",
     "description": "IOServer middleware set for OIDC/OAuth2 JWT authentication via JWKS (auth-service compatible)",
     "type": "module",
+    "packageManager": "pnpm@12.9.1",
+    "engines": {
+        "node": ">=22.0.0"
+    },
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {

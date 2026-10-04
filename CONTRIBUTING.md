@@ -24,8 +24,8 @@ Thank you for your interest in contributing to ioserver-oidc! This document cove
 
 ## Prerequisites
 
-- Node.js ≥ 18 (≥ 20 recommended)
-- pnpm v9 — `npm install -g pnpm@9`
+- Node.js ≥ 22
+- pnpm 12.9.1 (declared by the `packageManager` field in `package.json`) — `corepack enable` or `npm install -g pnpm@12.9.1`
 - TypeScript ≥ 5.0
 - An IOServer project as peer dependency (≥ 2.0.0)
 
