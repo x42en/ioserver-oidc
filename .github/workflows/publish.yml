@@ -5,6 +5,9 @@
 # Builds the TypeScript package and publishes to npmjs.
 #
 # npmjs publishing uses npm trusted publishing (GitHub OIDC).
+#
+# The pnpm version is NOT declared here: it is read from the
+# `packageManager` field in package.json (single source of truth).
 # ──────────────────────────────────────────────────────────────
 
 name: Release package
@@ -18,9 +21,6 @@ permissions:
   packages: write
   id-token: write
 
-env:
-  PNPM_VERSION: '9'
-
 jobs:
   build:
     name: Build
@@ -28,16 +28,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
-          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: pnpm
@@ -47,7 +46,6 @@ jobs:
 
       - name: Lint
         run: pnpm run lint
-        continue-on-error: true
 
       - name: Build
         run: pnpm run build
@@ -58,7 +56,7 @@ jobs:
           CI: true
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -71,16 +69,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Download build artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
@@ -95,17 +93,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup Node.js (GitHub Packages)
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@x42en'
 
       - name: Download build artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
