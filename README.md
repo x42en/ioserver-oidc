@@ -52,7 +52,7 @@
 
 | Dependency | Version |
 | ---------- | ------- |
-| Node.js    | ≥ 20    |
+| Node.js    | ≥ 22    |
 | ioserver   | ≥ 2.0.0 |
 | jose       | ≥ 6.0.0 |
 
