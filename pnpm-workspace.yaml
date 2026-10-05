@@ -1,0 +1,28 @@
+# pnpm 12 reads `overrides` from this file, not from the `pnpm` field in
+# package.json — pnpm 12 no longer reads that field at all.
+#
+# These four packages cannot be reached by raising a floor in package.json:
+# the vulnerable line is admitted only by a third-party parent's own declared
+# range (fastify@5.12.5 declares find-my-way ^9.0.0, socket.io@4.8.3 declares
+# socket.io-parser ~4.2.4, minimatch@10.2.5 declares brace-expansion ^5.0.1,
+# and the 3.1.x copy of fast-uri is pulled by @fastify/ajv-compiler, ajv and
+# fast-json-stringify). They become redundant on the next major dependency
+# refresh and should be removed then.
+overrides:
+  fast-uri: ^3.1.8
+  find-my-way: ^9.7.0
+  socket.io-parser: ^4.2.7
+  brace-expansion: ^5.0.12
+
+# pnpm's `minimumReleaseAge` supply-chain policy is active in this install
+# ("Verifying lockfile against supply-chain policies"): a version published
+# less than 24 h ago is rejected, and that is what
+# ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION reports. ioserver@2.2.1 — the floor
+# this change raises to, released with the corrected fastify/@fastify/static
+# ranges — was published inside that window, so without this entry a clean-room
+# `pnpm install --frozen-lockfile` fails outright and the whole remediation is
+# undeliverable. pnpm writes the entry itself; it is listed here rather than
+# left to be regenerated so the exception is visible to review. Drop it once
+# ioserver@2.2.1 has aged past the cutoff.
+minimumReleaseAgeExclude:
+  - ioserver@2.2.1
