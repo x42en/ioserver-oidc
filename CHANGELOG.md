@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-10-05
+
+### Security
+
+- **All 17 open Dependabot advisories cleared** (11 high, 6 medium) — dependency
+  floors raised to the first patched versions: `ioserver` 2.2.1 (pulls
+  `fastify` 5.12.5, `@fastify/static` 10.1.3 and `content-disposition` 2.0.1),
+  `vitest` 4.1.11 and `@vitest/coverage-v8` 4.1.11 (GHSA-82fw-gwwq-j7x9), and
+  `vite` 8.3.2 (pulls `postcss` 8.5.28, clearing GHSA-r28c-9q8g-f849 and
+  GHSA-fxqj-rqcc-2cmp).
+- **Four `pnpm-workspace.yaml` overrides** for advisories no declared floor can
+  reach, each held by a third-party parent's own range: `fast-uri` `^3.1.8`
+  (GHSA-4c8g-83qw-93j6, GHSA-v2hh-gcrm-f6hx, GHSA-7p8r-x3mc-p8w7,
+  GHSA-fph4-wmhf-6fwf, GHSA-f65p-4m7j-42xc, GHSA-jqff-g426-hqxp),
+  `find-my-way` `^9.7.0` (GHSA-c96f-x56v-gq3h), `socket.io-parser` `^4.2.7`
+  (GHSA-2m8v-j782-fhvr) and `brace-expansion` `^5.0.12`
+  (GHSA-3jxr-9vmj-r5cp). They become redundant on the next major dependency
+  refresh and should be removed then.
+
+### Changed
+
+- CI toolchain: pnpm 12.9.1 pinned through `packageManager`, Node floor
+  harmonised at `>=22.0.0`, GitHub Actions refreshed, and the lint gate in
+  `build.yml` made blocking.
+
 ## [0.2.0] — 2026-06-02
 
 ### Security
@@ -91,7 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full TypeScript declarations and ESM-only distribution.
 - GitHub Actions workflow for automated npm publishing on version tags.
 
-[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/x42en/ioserver-oidc/compare/v0.2.2...v0.2.3
 [0.2.0]: https://github.com/x42en/ioserver-oidc/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/x42en/ioserver-oidc/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/x42en/ioserver-oidc/compare/v0.1.2...v0.1.3
