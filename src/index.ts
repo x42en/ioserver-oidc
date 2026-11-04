@@ -1,9 +1,11 @@
 /**
  * ioserver-oidc — OIDC/OAuth2 middleware set for IOServer.
  *
- * Provides drop-in middleware classes that protect Fastify HTTP routes and
- * Socket.IO namespaces by verifying JWT access tokens issued by auth-service
- * (BetterAuth + OAuth2 provider) via JWKS.
+ * Native auth-service mode is the default: tokens issued by CIRCLE
+ * auth-service are verified against its JWKS, with RBAC, plan features,
+ * organizations and LiteLLM/gateway support. Set `OIDC_PROVIDER=oidc` to use
+ * any other standards-compliant OAuth 2.x / OIDC issuer with configurable
+ * claim names.
  *
  * Quick start:
  * ```ts
@@ -36,15 +38,81 @@
  * });
  * ```
  *
- * Required environment variables:
+ * Native environment:
  *   AUTH_SERVICE_URL       — Public base URL of the auth-service instance
  *   AUTH_SERVICE_APP_SLUG  — OAuth2 client_id / application slug
+ *   AUTH_SERVICE_AUDIENCE  — Expected `aud` claim (RFC 8707 resource URL)
+ *   AUTH_SERVICE_GATEWAY_URL — Optional LiteLLM gateway URL
  */
 
-export { OidcConfigManager } from "./OidcConfigManager.js";
+export { OidcConfigManager, buildConfig } from "./OidcConfigManager.js";
 export { OidcHttpMiddleware } from "./OidcHttpMiddleware.js";
 export { OidcSocketMiddleware } from "./OidcSocketMiddleware.js";
 export { OidcSocketAdminMiddleware } from "./OidcSocketAdminMiddleware.js";
 export { verifyOidcToken } from "./jwks.js";
+export { DEFAULT_CLAIM_MAPPING } from "./claims.js";
+export { applyAuthContext } from "./context.js";
+export { OidcTokenError } from "./errors.js";
+export type { OidcErrorCode } from "./errors.js";
 
-export type { OidcConfig, OidcUserContext, OidcFeatures } from "./types.js";
+// ── auth-service / LiteLLM helpers ─────────────────────────────────────────
+export {
+  AuthServiceWalletClient,
+  MICRO_PER_EUR,
+  createWalletClient,
+} from "./wallet.js";
+export type {
+  AuthServiceWalletOptions,
+  ListTransactionsOptions,
+  TopupOptions,
+  WalletAccount,
+  WalletSessionUsage,
+  WalletSessionUsageOptions,
+  WalletStats,
+  WalletStatsOptions,
+  WalletTransaction,
+  WalletTransactionPage,
+  WalletTransactionType,
+} from "./wallet.js";
+export {
+  AuthAiError,
+  GatewayClient,
+  createGatewayClient,
+  createRequestGatewayClient,
+  isInsufficientCredit,
+  isInsufficientCreditStatus,
+  toGatewayError,
+} from "./gateway.js";
+export type {
+  AuthServiceGatewayOptions,
+  GatewayAgent,
+  GatewayClientOptions,
+  GatewayMcpServer,
+  GatewayModel,
+  GatewayTokens,
+} from "./gateway.js";
+export { registerBackchannelLogout } from "./backchannel.js";
+export type { RegisterBackchannelLogoutOptions } from "./backchannel.js";
+
+// ── Entitlement helpers (shared wire contract with auth-ai) ────────────────
+export {
+  formatEuros,
+  getFeature,
+  hasFeature,
+  hasPermission,
+  hasRole,
+  WALLET_SELF_SCOPE,
+} from "@circle-rd/auth-ai";
+export type {
+  FeatureValue,
+  IdTokenClaims,
+  PermissionAction,
+} from "@circle-rd/auth-ai";
+
+export type {
+  OidcClaimMapping,
+  OidcConfig,
+  OidcFeatures,
+  OidcProvider,
+  OidcUserContext,
+} from "./types.js";

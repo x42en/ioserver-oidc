@@ -30,3 +30,8 @@ pnpm-debug.log*
 # Coverage / test output
 coverage/
 .nyc_output/
+
+# Documentation build output
+docs-site/.nuxt/
+docs-site/.output/
+docs-site/.data/

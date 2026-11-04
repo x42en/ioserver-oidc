@@ -173,7 +173,9 @@ describe("jwks — verifyOidcToken()", () => {
   it("re-throws when jose.jwtVerify throws", async () => {
     mockJwtVerify.mockRejectedValue(new Error("JWTExpired"));
 
-    await expect(verifyOidcToken("tok", baseConfig)).rejects.toThrow("JWTExpired");
+    await expect(verifyOidcToken("tok", baseConfig)).rejects.toThrow(
+      "JWTExpired",
+    );
   });
 
   it("uses config.audience when set (RFC 8707 resource URL)", async () => {
@@ -334,5 +336,193 @@ describe("jwks — verifyOidcToken()", () => {
     expect(ctx.roles).toEqual(["admin", "user"]);
     expect(ctx.permissions).toEqual(["read", "write"]);
     expect(ctx.userRole).toBe("admin");
+  });
+});
+
+describe("jwks — provider features", () => {
+  const baseConfig = {
+    authServiceUrl: "https://auth.example.com",
+    appSlug: "my-app",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreateRemoteJWKSet.mockReturnValue({ _keyset: true });
+  });
+
+  it("maps plan, session, scopes and client id", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: {
+        sub: "user-1",
+        azp: "my-app",
+        scope: "openid roles wallet:self:read",
+        plan: "pro",
+        sid: "sid-1",
+        email_verified: true,
+        picture: "https://img.example.com/a.png",
+        company: "CIRCLE",
+        roles: ["editor"],
+      },
+    });
+
+    const ctx = await verifyOidcToken("tok", baseConfig);
+
+    expect(ctx.plan).toBe("pro");
+    expect(ctx.sid).toBe("sid-1");
+    expect(ctx.clientId).toBe("my-app");
+    expect(ctx.scopes).toEqual(["openid", "roles", "wallet:self:read"]);
+    expect(ctx.emailVerified).toBe(true);
+    expect(ctx.picture).toBe("https://img.example.com/a.png");
+    expect(ctx.company).toBe("CIRCLE");
+  });
+
+  it("rejects client_credentials tokens by default in native mode", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "my-app", azp: "my-app", roles: [] },
+    });
+
+    await expect(verifyOidcToken("tok", baseConfig)).rejects.toMatchObject({
+      code: "ERR_MACHINE_TOKEN_FORBIDDEN",
+    });
+  });
+
+  it("accepts client_credentials tokens when explicitly allowed", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "my-app", azp: "my-app", roles: [] },
+    });
+
+    const ctx = await verifyOidcToken("tok", {
+      ...baseConfig,
+      allowMachineTokens: true,
+    });
+
+    expect(ctx.isMachine).toBe(true);
+  });
+
+  it("uses custom claim names for a generic provider", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: {
+        sub: "user-1",
+        appid: "client-123",
+        groups: ["editor"],
+        scp: ["read", "write"],
+        entitlements: { beta: true },
+        tenant: "org-1",
+        mail: "bob@example.com",
+        displayName: "Bob",
+      },
+    });
+
+    const ctx = await verifyOidcToken("tok", {
+      provider: "oidc",
+      authServiceUrl: "https://issuer.example.com",
+      appSlug: "client-123",
+      audience: "api://my-api",
+      issuer: "https://issuer.example.com",
+      jwksUri: "https://issuer.example.com/jwks",
+      claims: {
+        roles: "groups",
+        permissions: "scp",
+        features: "entitlements",
+        plan: "plan",
+        orgId: "tenant",
+        email: "mail",
+        name: "displayName",
+        picture: "picture",
+        company: "company",
+        authorizedParty: ["appid", "azp"],
+      },
+    });
+
+    expect(ctx.roles).toEqual(["editor"]);
+    expect(ctx.permissions).toEqual(["read", "write"]);
+    expect(ctx.features).toEqual({ beta: true });
+    expect(ctx.email).toBe("bob@example.com");
+    expect(ctx.name).toBe("Bob");
+    expect(ctx.org_id).toBe("org-1");
+    expect(ctx.clientId).toBe("client-123");
+  });
+
+  it("derives the generic JWKS default from the issuer", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "client-123", aud: "api://my-api" },
+    });
+
+    await verifyOidcToken("tok", {
+      provider: "oidc",
+      authServiceUrl: "https://issuer.example.com",
+      appSlug: "client-123",
+      audience: "api://my-api",
+      issuer: "https://issuer.example.com",
+    });
+
+    expect(mockCreateRemoteJWKSet).toHaveBeenCalledWith(
+      new URL("https://issuer.example.com/.well-known/jwks.json"),
+    );
+  });
+});
+
+describe("jwks — token size", () => {
+  it("rejects an empty token", async () => {
+    await expect(
+      verifyOidcToken("", {
+        authServiceUrl: "https://auth.example.com",
+        appSlug: "my-app",
+      }),
+    ).rejects.toMatchObject({ code: "ERR_AUTH_TOKEN_INVALID" });
+  });
+
+  it("rejects an oversized token before parsing", async () => {
+    await expect(
+      verifyOidcToken("x".repeat(16_385), {
+        authServiceUrl: "https://auth.example.com",
+        appSlug: "my-app",
+      }),
+    ).rejects.toMatchObject({ code: "ERR_AUTH_TOKEN_INVALID" });
+    expect(mockJwtVerify).not.toHaveBeenCalled();
+  });
+});
+
+describe("jwks — subject validation", () => {
+  it("rejects a token without a string subject", async () => {
+    mockCreateRemoteJWKSet.mockReturnValue({ _keyset: true });
+    mockJwtVerify.mockResolvedValue({ payload: { azp: "my-app" } });
+
+    await expect(
+      verifyOidcToken("tok", {
+        authServiceUrl: "https://auth.example.com",
+        appSlug: "my-app",
+      }),
+    ).rejects.toThrow(/invalid "sub" claim/);
+  });
+});
+
+describe("jwks — algorithm allow-list", () => {
+  it("drops symmetric algorithms from a manual configuration", async () => {
+    mockCreateRemoteJWKSet.mockReturnValue({ _keyset: true });
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "my-app" },
+    });
+
+    await verifyOidcToken("tok", {
+      authServiceUrl: "https://auth.example.com",
+      appSlug: "my-app",
+      algorithms: ["HS256", "RS256"],
+    });
+
+    const opts = mockJwtVerify.mock.calls[0]?.[2] as { algorithms: string[] };
+    expect(opts.algorithms).toEqual(["RS256"]);
+  });
+
+  it("refuses a configuration with no asymmetric algorithm", async () => {
+    mockCreateRemoteJWKSet.mockReturnValue({ _keyset: true });
+
+    await expect(
+      verifyOidcToken("tok", {
+        authServiceUrl: "https://auth.example.com",
+        appSlug: "my-app",
+        algorithms: ["HS256", "none"],
+      }),
+    ).rejects.toThrow(/No asymmetric JWS algorithm/);
   });
 });

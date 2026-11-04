@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { OidcUserContext } from "../../src/types.js";
+import { OidcTokenError } from "../../src/errors.js";
 
 // ── Mock verifyOidcToken ──────────────────────────────────────────────────────
 const mockVerifyOidcToken = vi.fn<() => Promise<OidcUserContext>>();
@@ -12,7 +13,9 @@ const { OidcHttpMiddleware } = await import("../../src/OidcHttpMiddleware.js");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeOidcCtx(overrides: Partial<OidcUserContext> = {}): OidcUserContext {
+function makeOidcCtx(
+  overrides: Partial<OidcUserContext> = {},
+): OidcUserContext {
   return {
     userId: "ctx-user",
     sub: "sub-123",
@@ -88,6 +91,24 @@ describe("OidcHttpMiddleware", () => {
     expect(reply._body.code).toBe("ERR_AUTH_TOKEN_REQUIRED");
   });
 
+  it("replies 403 when a machine token is refused", async () => {
+    mockVerifyOidcToken.mockRejectedValue(
+      new OidcTokenError(
+        "ERR_MACHINE_TOKEN_FORBIDDEN",
+        "client_credentials tokens are not accepted",
+      ),
+    );
+
+    const { handler } = getInstance();
+    const req = makeRequest("Bearer machine-token");
+    const reply = makeReply();
+
+    await handler(req, reply);
+
+    expect(reply._code).toBe(403);
+    expect(reply._body.code).toBe("ERR_MACHINE_TOKEN_FORBIDDEN");
+  });
+
   it("replies 401 when JWT verification fails", async () => {
     mockVerifyOidcToken.mockRejectedValue(new Error("JWTExpired"));
 
@@ -120,7 +141,9 @@ describe("OidcHttpMiddleware", () => {
   });
 
   it("uses user.id and user.role from findOrCreate when available", async () => {
-    mockVerifyOidcToken.mockResolvedValue(makeOidcCtx({ sub: "sub-123", userRole: "user" }));
+    mockVerifyOidcToken.mockResolvedValue(
+      makeOidcCtx({ sub: "sub-123", userRole: "user" }),
+    );
 
     const mockUser = { id: "db-user-id", role: "admin", isDisabled: false };
     const appHandle = makeAppHandle({

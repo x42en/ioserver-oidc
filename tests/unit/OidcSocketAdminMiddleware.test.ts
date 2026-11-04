@@ -68,3 +68,84 @@ describe("OidcSocketAdminMiddleware", () => {
     expect(next).toHaveBeenCalledWith(new Error("ERR_FORBIDDEN"));
   });
 });
+
+describe("OidcSocketAdminMiddleware — configurable roles", () => {
+  it("accepts a role listed in the resolved config", () => {
+    const appHandle = {
+      log: vi.fn(),
+      oidcConfig: {
+        getConfig: () => ({
+          authServiceUrl: "https://auth.example.com",
+          appSlug: "app",
+          adminRoles: ["staff"],
+        }),
+      },
+    };
+    const handler = new OidcSocketAdminMiddleware(appHandle as any).handle(
+      appHandle as any,
+    );
+    const next = vi.fn();
+
+    handler({ roles: ["staff"] } as any, next);
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("falls back to OIDC_ADMIN_ROLES when no config is registered", () => {
+    process.env["OIDC_ADMIN_ROLES"] = "owner, operator";
+    try {
+      const appHandle = { log: vi.fn() };
+      const handler = new OidcSocketAdminMiddleware(appHandle as any).handle(
+        appHandle as any,
+      );
+      const next = vi.fn();
+
+      handler({ roles: ["operator"] } as any, next);
+
+      expect(next).toHaveBeenCalledWith();
+    } finally {
+      delete process.env["OIDC_ADMIN_ROLES"];
+    }
+  });
+
+  it("falls back to environment roles when the config manager is not ready", () => {
+    process.env["OIDC_ADMIN_ROLES"] = "admin";
+    try {
+      const appHandle = {
+        log: vi.fn(),
+        oidcConfig: {
+          getConfig: () => {
+            throw new Error("not started");
+          },
+        },
+      };
+      const handler = new OidcSocketAdminMiddleware(appHandle as any).handle(
+        appHandle as any,
+      );
+      const next = vi.fn();
+
+      handler({ roles: ["admin"] } as any, next);
+
+      expect(next).toHaveBeenCalledWith();
+    } finally {
+      delete process.env["OIDC_ADMIN_ROLES"];
+    }
+  });
+
+  it("falls back to admin when the env list is empty", () => {
+    process.env["AUTH_SERVICE_ADMIN_ROLES"] = " , ";
+    try {
+      const appHandle = { log: vi.fn() };
+      const handler = new OidcSocketAdminMiddleware(appHandle as any).handle(
+        appHandle as any,
+      );
+      const next = vi.fn();
+
+      handler({ roles: ["admin"] } as any, next);
+
+      expect(next).toHaveBeenCalledWith();
+    } finally {
+      delete process.env["AUTH_SERVICE_ADMIN_ROLES"];
+    }
+  });
+});
