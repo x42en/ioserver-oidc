@@ -26,8 +26,8 @@ Thank you for your interest in contributing to ioserver-oidc! This document cove
 
 - Node.js ≥ 22
 - pnpm 12.9.1 (declared by the `packageManager` field in `package.json`) — `corepack enable` or `npm install -g pnpm@12.9.1`
-- TypeScript ≥ 5.0
-- An IOServer project as peer dependency (≥ 2.0.0)
+- TypeScript ≥ 6.0
+- An IOServer project as peer dependency (≥ 2.2.1)
 
 ## Development setup
 
@@ -50,27 +50,31 @@ pnpm test
 
 ## Architecture rules
 
-ioserver-oidc provides four plug-and-play IOServer components. Each follows the IOServer five-component model — see [IOServer CONTRIBUTING.md](https://github.com/x42en/IOServer/blob/main/CONTRIBUTING.md) for the full model description.
+ioserver-oidc provides IOServer components, a provider-aware verifier and auth-service helpers. Each component follows the IOServer five-component model — see [IOServer CONTRIBUTING.md](https://github.com/x42en/IOServer/blob/main/CONTRIBUTING.md) for the full model description.
 
 ### Component model
 
-| Component | Role in this library |
-|---|---|
-| **OidcConfigManager** | Reads `AUTH_SERVICE_*` env vars; exposes an `OidcConfig` to sibling middlewares via `appHandle.oidcConfig.getConfig()` |
-| **OidcHttpMiddleware** | Verifies Bearer JWTs on HTTP routes; calls `appHandle.users.findOrCreate`; injects auth context onto `request` |
-| **OidcSocketMiddleware** | Same as above for Socket.IO handshake authentication |
-| **OidcSocketAdminMiddleware** | Extends `OidcSocketMiddleware` — additionally enforces that the role is `admin` |
+| Component                     | Role in this library                                                                                                              |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **OidcConfigManager**         | Reads `AUTH_SERVICE_*` / `OIDC_*` env vars; exposes an `OidcConfig` to sibling middlewares via `appHandle.oidcConfig.getConfig()` |
+| **OidcHttpMiddleware**        | Verifies Bearer JWTs on HTTP routes; calls `appHandle.users.findOrCreate`; injects auth context onto `request`                    |
+| **OidcSocketMiddleware**      | Same as above for Socket.IO handshake authentication                                                                              |
+| **OidcSocketAdminMiddleware** | Role guard chained after `OidcSocketMiddleware`; accepts the configured admin roles                                               |
+| **LiteLLM / wallet helpers**  | Build an auth-ai `GatewayClient` and read the auth-service wallet from a verified token                                           |
+| **Back-channel logout**       | Mounts the OIDC Back-Channel Logout endpoint on the IOServer Fastify instance                                                     |
 
 Rules:
 
 - **Middlewares must be stateless** between requests/connections. The only allowed persistent state is the JWKS key-set cache (in-memory, keyed by URI).
 - **Config is lazy-resolved** on the first request: middlewares call `OidcConfigManager.getConfig()` once and cache the result.
+- Provider-specific claim handling lives in `jwks.ts` and the config layer, never in the middlewares.
+- `@circle-rd/auth-ai` is the reference for the native wire contract; do not reimplement its wallet or gateway protocol.
 - **No direct `process.env` reads** inside `OidcHttpMiddleware` or `OidcSocketMiddleware` — always go through `buildConfig()` / `OidcConfigManager`.
 - **`appHandle.users.findOrCreate`** is called only when the manager is registered. If absent, the middleware falls through without error.
 
 ### TypeScript requirements
 
-- `"strict": true` in `tsconfig.json` — no exceptions
+- `strict`, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` in `tsconfig.json` — no exceptions
 - Avoid `any` in public APIs. Use `unknown` + type-guards or define proper interfaces in `src/types.ts`
 - All exported functions and class methods must have explicit return types
 - The `OidcConfig` interface is the single source of truth for configuration shape — add new options there first, then propagate to `buildConfig()` and the middlewares
@@ -89,12 +93,12 @@ Rules:
 
 ### Naming conventions
 
-| Element | Convention |
-|---|---|
-| Environment variables | `AUTH_SERVICE_<SUFFIX>` (screaming snake case) |
-| Config fields | camelCase mirror of the env var suffix (e.g. `AUTH_SERVICE_AUDIENCE` → `config.audience`) |
-| Middleware class names | `Oidc<Scope><Type>Middleware` (e.g. `OidcSocketAdminMiddleware`) |
-| Internal helpers | Module-level functions, unexported unless tested directly |
+| Element                | Convention                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| Environment variables  | `AUTH_SERVICE_<SUFFIX>` (native) or `OIDC_<SUFFIX>` (generic), screaming snake case       |
+| Config fields          | camelCase mirror of the env var suffix (e.g. `AUTH_SERVICE_AUDIENCE` → `config.audience`) |
+| Middleware class names | `Oidc<Scope><Type>Middleware` (e.g. `OidcSocketAdminMiddleware`)                          |
+| Internal helpers       | Module-level functions, unexported unless tested directly                                 |
 
 ---
 
@@ -111,7 +115,11 @@ tests/
 │   ├── OidcConfigManager.test.ts            # Manager lifecycle (start / getConfig)
 │   ├── OidcHttpMiddleware.test.ts           # HTTP middleware — happy path + error paths
 │   ├── OidcSocketMiddleware.test.ts         # Socket.IO middleware — same coverage
-│   └── OidcSocketAdminMiddleware.test.ts    # Admin enforcement
+│   ├── OidcSocketAdminMiddleware.test.ts    # Admin enforcement
+│   ├── context.test.ts                      # Context injection
+│   ├── gateway.test.ts                      # LiteLLM gateway helpers
+│   ├── wallet.test.ts                       # Wallet client and schema validation
+│   └── backchannel.test.ts                  # Back-channel logout route
 └── integration/
     └── verifyOidcToken.integration.test.ts  # Real JWT signing + JWKS mock server
 ```
@@ -128,12 +136,12 @@ pnpm run test:watch         # watch mode (development)
 
 ### Coverage targets
 
-| Metric | Target |
-|---|---|
-| Statements | > 90% |
-| Branches | > 85% |
-| Functions | > 95% |
-| Lines | > 90% |
+| Metric     | Target |
+| ---------- | ------ |
+| Statements | > 90%  |
+| Branches   | > 85%  |
+| Functions  | > 95%  |
+| Lines      | > 90%  |
 
 ### Writing tests
 
@@ -188,13 +196,12 @@ BREAKING CHANGE: The `appSlug` field in `OidcConfig` is renamed to
 
 ## Pull requests
 
-1. Fork the repository and create a feature branch from `main` (e.g. `feat/my-feature`)
+1. Fork the repository and create a feature branch from `develop` (e.g. `feat/my-feature`)
 2. Write or update tests for your change — every new `OidcConfig` field needs coverage in both `buildConfig.test.ts` and the relevant middleware/jwks test
-3. Ensure `pnpm test` passes (all suites)
-4. Ensure `pnpm run build` produces no TypeScript errors
-5. Ensure `pnpm run lint` reports no warnings
-6. Open a PR against `main` — the CI pipeline runs automatically on every PR
-7. Address review comments; squash merge when approved
+3. Run `pnpm format`, `pnpm build`, `pnpm lint`, `pnpm test` and `pnpm test:coverage`
+4. Ensure all gates pass with no TypeScript error, lint warning or coverage regression
+5. Open a PR against `develop` — the CI pipeline runs automatically on every PR
+6. Address review comments; squash merge when approved
 
 ---
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { OidcUserContext } from "../../src/types.js";
+import { OidcTokenError } from "../../src/errors.js";
 
 // ── Mock verifyOidcToken ──────────────────────────────────────────────────────
 const mockVerifyOidcToken = vi.fn<() => Promise<OidcUserContext>>();
@@ -8,11 +9,14 @@ vi.mock("../../src/jwks.js", () => ({
   verifyOidcToken: mockVerifyOidcToken,
 }));
 
-const { OidcSocketMiddleware } = await import("../../src/OidcSocketMiddleware.js");
+const { OidcSocketMiddleware } =
+  await import("../../src/OidcSocketMiddleware.js");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeOidcCtx(overrides: Partial<OidcUserContext> = {}): OidcUserContext {
+function makeOidcCtx(
+  overrides: Partial<OidcUserContext> = {},
+): OidcUserContext {
   return {
     userId: "ctx-user",
     sub: "sub-123",
@@ -71,6 +75,23 @@ describe("OidcSocketMiddleware", () => {
     await handler(socket, next);
 
     expect(next).toHaveBeenCalledWith(new Error("ERR_AUTH_TOKEN_REQUIRED"));
+  });
+
+  it("rejects a machine token with ERR_MACHINE_TOKEN_FORBIDDEN", async () => {
+    mockVerifyOidcToken.mockRejectedValue(
+      new OidcTokenError(
+        "ERR_MACHINE_TOKEN_FORBIDDEN",
+        "client_credentials tokens are not accepted",
+      ),
+    );
+
+    const { handler } = getInstance();
+    const socket = makeSocket("machine-token");
+    const next = vi.fn();
+
+    await handler(socket, next);
+
+    expect(next).toHaveBeenCalledWith(new Error("ERR_MACHINE_TOKEN_FORBIDDEN"));
   });
 
   it("accepts token from socket.handshake.auth.token", async () => {

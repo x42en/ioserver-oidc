@@ -2,7 +2,9 @@ import { BaseMiddleware } from "ioserver";
 import type { AppHandle } from "ioserver";
 import { verifyOidcToken } from "./jwks.js";
 import { buildConfig } from "./OidcConfigManager.js";
-import type { OidcConfig } from "./types.js";
+import { applyAuthContext } from "./context.js";
+import { OidcTokenError } from "./errors.js";
+import type { OidcConfig, OidcUserContext } from "./types.js";
 
 interface HttpRequestLike extends Record<string, unknown> {
   headers: {
@@ -15,8 +17,17 @@ interface HttpReplyLike {
   send(payload: unknown): void;
 }
 
+interface LocalUser {
+  id: string;
+  role: string;
+  isDisabled: boolean;
+}
+
 /**
  * OidcHttpMiddleware — Verifies OIDC/OAuth2 JWT access tokens on HTTP routes.
+ *
+ * Native auth-service mode is the default. Set `OIDC_PROVIDER=oidc` for any
+ * other standards-compliant issuer, with configurable claim names.
  *
  * Usage:
  * ```ts
@@ -28,20 +39,14 @@ interface HttpReplyLike {
  * });
  * ```
  *
- * On success, injects the following onto the Fastify request:
- *   - `(request as any).sub`         — OIDC subject (stable auth-service user ID)
- *   - `(request as any).userId`      — Local DB user ID (from findOrCreate)
- *   - `(request as any).userRole`    — Primary role ("admin" | "user")
- *   - `(request as any).roles`       — Full roles array
- *   - `(request as any).permissions` — Permission strings array
- *   - `(request as any).features`    — Feature flags / limits object
+ * On success, injects the user context onto the Fastify request (`sub`,
+ * `userId`, `userRole`, `roles`, `permissions`, `features`, `plan`, `sid`,
+ * `clientId`, `scopes`, `isMachine`, `auth`, `authToken`, and `org_id` when
+ * present).
  *
  * The middleware calls `appHandle.users.findOrCreate(sub, { email, name })`
  * to auto-provision the local user record on first access.
  * Disabled accounts are rejected with 403.
- *
- * Config is resolved from `appHandle.oidcConfig.getConfig()` if available,
- * otherwise falls back to `AUTH_SERVICE_URL` / `AUTH_SERVICE_APP_SLUG` env vars.
  */
 export class OidcHttpMiddleware extends BaseMiddleware {
   private _config: OidcConfig | null = null;
@@ -68,7 +73,7 @@ export class OidcHttpMiddleware extends BaseMiddleware {
       const token = authHeader.slice(7);
 
       // ── 3. Verify JWT ──────────────────────────────────────────────────
-      let oidcCtx;
+      let oidcCtx: OidcUserContext;
       try {
         oidcCtx = await verifyOidcToken(token, this._config);
       } catch (err) {
@@ -76,24 +81,30 @@ export class OidcHttpMiddleware extends BaseMiddleware {
           3,
           `[OidcHttpMiddleware] JWT verification failed: ${String(err)}`,
         );
-        reply.code(401).send({
-          statusCode: 401,
-          error: "Unauthorized",
-          code: "ERR_AUTH_TOKEN_INVALID",
-          message: "Invalid or expired token.",
+        const code =
+          err instanceof OidcTokenError ? err.code : "ERR_AUTH_TOKEN_INVALID";
+        const statusCode = code === "ERR_MACHINE_TOKEN_FORBIDDEN" ? 403 : 401;
+        reply.code(statusCode).send({
+          statusCode,
+          error: statusCode === 403 ? "Forbidden" : "Unauthorized",
+          code,
+          message:
+            code === "ERR_MACHINE_TOKEN_FORBIDDEN"
+              ? "Machine tokens are not accepted on user routes."
+              : "Invalid or expired token.",
         });
         return;
       }
 
       // ── 4. Auto-provision local user record ────────────────────────────
-      let user: { id: string; role: string; isDisabled: boolean } | null = null;
+      let user: LocalUser | null = null;
 
       if (typeof appHandle["users"]?.findOrCreate === "function") {
         try {
-          user = await appHandle["users"].findOrCreate(oidcCtx.sub, {
+          user = (await appHandle["users"].findOrCreate(oidcCtx.sub, {
             email: oidcCtx.email,
             name: oidcCtx.name,
-          });
+          })) as LocalUser;
         } catch (err) {
           appHandle.log(
             3,
@@ -121,15 +132,7 @@ export class OidcHttpMiddleware extends BaseMiddleware {
       }
 
       // ── 5. Inject auth context ────────────────────────────────────────
-      request["sub"] = oidcCtx.sub;
-      request["userId"] = user?.id ?? oidcCtx.sub;
-      request["userRole"] = user?.role ?? oidcCtx.userRole;
-      request["roles"] = oidcCtx.roles;
-      request["permissions"] = oidcCtx.permissions;
-      request["features"] = oidcCtx.features;
-      if (oidcCtx.org_id !== undefined) {
-        request["org_id"] = oidcCtx.org_id;
-      }
+      applyAuthContext(request, oidcCtx, token, user);
     };
   }
 

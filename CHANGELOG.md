@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-11-04
+
+### Added
+
+- **Native auth-service provider (default)** — `OIDC_PROVIDER=auth-service`
+  decodes roles, permissions, plan features, organizations, scopes, `sid` and
+  `clientId`, and supports the auth-service `client_credentials` refusal.
+- **Generic OIDC provider** — `OIDC_PROVIDER=oidc` verifies any JWKS issuer with
+  configurable claim names (`OIDC_*_CLAIM`) and authorized-party claims.
+- **LiteLLM gateway helpers** — `createGatewayClient()` and
+  `createRequestGatewayClient()` build an auth-ai `GatewayClient` from a user
+  token; gateway errors are mapped to `GW_*` codes.
+- **Wallet client** — `createWalletClient()` reads the user's auth-service
+  wallet, stats, session usage, transactions and top-up options with `bigint`
+  micro-euro amounts.
+- **Back-channel logout** — `registerBackchannelLogout()` mounts the OIDC
+  Back-Channel Logout endpoint on `server.getApp()`.
+- **Entitlement helpers** — `hasRole`, `hasPermission`, `hasFeature`,
+  `getFeature`, `formatEuros` and `WALLET_SELF_SCOPE` are re-exported from
+  `@circle-rd/auth-ai`.
+- **Context fields** — `plan`, `sid`, `clientId`, `scopes`, `isMachine`, `auth`
+  and `authToken` are injected on HTTP requests and sockets.
+- **Configurable admin roles** — `OIDC_ADMIN_ROLES` /
+  `AUTH_SERVICE_ADMIN_ROLES` and `OidcConfig.adminRoles`.
+- New documentation pages for providers, LiteLLM/wallet, back-channel logout
+  and the 0.3 migration.
+- Documentation site dependencies updated to Docus 5.15, Nuxt 4.6.4 and
+  better-sqlite3 12.11.1, with npm overrides for `zod`, `minimatch`, `glob` and
+  `esbuild`. Its Docker defaults now use the origin-only `NUXT_SITE_URL`
+  required by Docus 5.15, and its generated `package-lock.json` is ignored and
+  no longer committed.
+
+### Changed
+
+- Defaults and architecture align with `auth-service` and `@circle-rd/auth-ai`:
+  Node 22+, `ioserver` 2.2.1+, TypeScript 6, Vitest 5, ESLint 10 and Prettier.
+- `OidcConfigManager` now validates the provider and all required variables at
+  startup, with explicit native and generic error messages.
+- `verifyOidcToken` now accepts a clock tolerance (default 5 seconds) and maps
+  optional claims without emitting null fields.
+
+### Security
+
+- Native `client_credentials` tokens (`sub === azp`) are refused by default with
+  `ERR_MACHINE_TOKEN_FORBIDDEN`; opt in with
+  `AUTH_SERVICE_ALLOW_MACHINE_TOKENS=true`.
+- The asymmetric algorithm allow-list is enforced for both environment and
+  programmatic configuration: `OIDC_ALGORITHMS` rejects `HS*` and `none`, and
+  a manual `algorithms` list is filtered before verification.
+- The `sub` claim must be a non-empty string; token payloads are no longer
+  cast wholesale.
+- Access tokens are bounded to 16 KiB before JWKS verification.
+- The generic provider can bind `azp` / custom authorized-party claims to
+  `OIDC_CLIENT_ID`, and resource-audience mode requires the party claim when a
+  client id is configured.
+- Back-channel logout validates signature, `typ`, audience, event, lifetime and
+  replay before invoking the callback.
+- Wallet and gateway errors never include the access token.
+- Cleared all high and moderate advisories with `pnpm-workspace.yaml`
+  overrides: `engine.io`, `source-map-js`, `fast-uri`, `glob`, `minimatch` and
+  `fastify`. `pnpm audit` now reports no known vulnerabilities.
+
 ## [0.2.3] — 2026-10-05
 
 ### Security
@@ -116,7 +178,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full TypeScript declarations and ESM-only distribution.
 - GitHub Actions workflow for automated npm publishing on version tags.
 
-[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/x42en/ioserver-oidc/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/x42en/ioserver-oidc/compare/v0.2.2...v0.2.3
 [0.2.0]: https://github.com/x42en/ioserver-oidc/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/x42en/ioserver-oidc/compare/v0.1.3...v0.1.4

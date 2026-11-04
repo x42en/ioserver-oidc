@@ -1,5 +1,6 @@
 import { BaseMiddleware } from "ioserver";
 import type { AppHandle } from "ioserver";
+import type { OidcConfig } from "./types.js";
 
 type SocketNext = (err?: Error) => void;
 
@@ -8,14 +9,27 @@ interface AdminSocketLike {
   userRole?: unknown;
 }
 
+function envAdminRoles(): readonly string[] {
+  const value =
+    process.env["OIDC_ADMIN_ROLES"] ?? process.env["AUTH_SERVICE_ADMIN_ROLES"];
+  if (!value) return ["admin"];
+  const roles = value
+    .split(",")
+    .map((role) => role.trim())
+    .filter(Boolean);
+  return roles.length > 0 ? roles : ["admin"];
+}
+
 /**
- * OidcSocketAdminMiddleware — Role guard for admin-only Socket.IO namespaces.
+ * OidcSocketAdminMiddleware — Role guard for privileged Socket.IO namespaces.
  *
  * Must be chained **after** `OidcSocketMiddleware`, which injects
  * `socket.userRole` and `socket.roles`.
  *
- * Rejects the Socket.IO connection with `ERR_FORBIDDEN` if the authenticated
- * user does not hold the "admin" role.
+ * Rejects the connection with `ERR_FORBIDDEN` unless the authenticated user
+ * holds one of the accepted roles. The default accepted role is `"admin"`;
+ * configure it with `OIDC_ADMIN_ROLES` or `AUTH_SERVICE_ADMIN_ROLES`
+ * (comma-separated).
  *
  * Usage:
  * ```ts
@@ -27,19 +41,44 @@ interface AdminSocketLike {
  * ```
  */
 export class OidcSocketAdminMiddleware extends BaseMiddleware {
-  handle(_appHandle: AppHandle) {
+  handle(appHandle: AppHandle) {
+    let acceptedRoles: readonly string[] | null = null;
+
     return (socket: AdminSocketLike, next: SocketNext) => {
+      if (!acceptedRoles) {
+        acceptedRoles = this._resolveAdminRoles(appHandle);
+      }
+
       const roles: string[] = Array.isArray(socket.roles)
-        ? socket.roles.filter((role): role is string => typeof role === "string")
+        ? socket.roles.filter(
+            (role): role is string => typeof role === "string",
+          )
         : typeof socket.userRole === "string"
           ? [socket.userRole]
           : [];
 
-      if (!roles.includes("admin")) {
+      if (!roles.some((role) => acceptedRoles?.includes(role))) {
         return next(new Error("ERR_FORBIDDEN"));
       }
 
       next();
     };
+  }
+
+  private _resolveAdminRoles(appHandle: AppHandle): readonly string[] {
+    try {
+      const config = appHandle["oidcConfig"]?.getConfig?.() as
+        OidcConfig | undefined;
+      if (config?.adminRoles && config.adminRoles.length > 0) {
+        return config.adminRoles;
+      }
+    } catch {
+      // Fail closed: a manager that is not ready must not grant admin access.
+      appHandle.log?.(
+        3,
+        "[OidcSocketAdminMiddleware] OIDC config unavailable; falling back to environment roles.",
+      );
+    }
+    return envAdminRoles();
   }
 }

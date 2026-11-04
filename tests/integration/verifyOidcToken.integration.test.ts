@@ -22,7 +22,8 @@ const APP_SLUG = "test-app";
 
 beforeAll(async () => {
   // Generate RSA-2048 key pair
-  const { privateKey: priv, publicKey: pub } = await jose.generateKeyPair("RS256");
+  const { privateKey: priv, publicKey: pub } =
+    await jose.generateKeyPair("RS256");
   privateKey = priv;
   publicKey = pub;
 
@@ -57,13 +58,19 @@ afterAll(() => {
 
 async function signToken(
   claims: Record<string, unknown>,
-  options: { expiresIn?: string; expiresAt?: Date; audience?: string; issuer?: string } = {},
+  options: {
+    expiresIn?: string;
+    expiresAt?: Date;
+    audience?: string;
+    issuer?: string;
+  } = {},
 ): Promise<string> {
   const builder = new jose.SignJWT(claims)
     .setProtectedHeader({ alg: "RS256", kid: "test-key-1" })
     .setIssuedAt()
     .setIssuer(options.issuer ?? ISSUER)
-    .setAudience(options.audience ?? APP_SLUG);  if (options.expiresAt !== undefined) {
+    .setAudience(options.audience ?? APP_SLUG);
+  if (options.expiresAt !== undefined) {
     builder.setExpirationTime(options.expiresAt);
   } else if (options.expiresIn !== undefined) {
     builder.setExpirationTime(options.expiresIn);
@@ -115,7 +122,7 @@ describe("verifyOidcToken() — integration (real RSA JWKS)", () => {
 
   it("throws on an expired token", async () => {
     // Set expiry to 1 second in the past
-    const expiredAt = new Date(Date.now() - 1000);
+    const expiredAt = new Date(Date.now() - 10_000);
     const token = await signToken({ sub: "user-1" }, { expiresAt: expiredAt });
 
     await expect(verifyOidcToken(token, config)).rejects.toThrow();
@@ -162,7 +169,10 @@ describe("verifyOidcToken() — integration (real RSA JWKS)", () => {
     // PUBLIC key bytes as the HMAC secret. Must be rejected by the allow-list.
     const pubJwk = await jose.exportJWK(publicKey);
     const secret = new TextEncoder().encode(JSON.stringify(pubJwk));
-    const hsToken = await new jose.SignJWT({ sub: "attacker", roles: ["admin"] })
+    const hsToken = await new jose.SignJWT({
+      sub: "attacker",
+      roles: ["admin"],
+    })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
       .setIssuer(ISSUER)

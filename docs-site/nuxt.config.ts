@@ -4,14 +4,14 @@ export default defineNuxtConfig({
     baseURL: process.env.NUXT_APP_BASE_URL ?? "/ioserver-oidc/",
   },
   site: {
-    url: process.env.NUXT_SITE_URL ?? "https://docs.circle-cyber.com/ioserver-oidc",
+    url: process.env.NUXT_SITE_URL ?? "https://docs.circle-cyber.com",
   },
   robots: { robotsTxt: false },
   meta: {
     title: "IOServer OIDC",
     description:
       "Drop-in OIDC/OAuth2 JWT middleware set for IOServer. Protects Fastify HTTP routes and Socket.IO namespaces via remote JWKS.",
-    ogHost: process.env.NUXT_SITE_URL ?? "https://docs.circle-cyber.com/ioserver-oidc",
+    ogHost: process.env.NUXT_SITE_URL ?? "https://docs.circle-cyber.com",
   },
   llms: {
     title: "IOServer OIDC",

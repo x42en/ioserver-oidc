@@ -1,5 +1,13 @@
 import * as jose from "jose";
-import type { OidcConfig, OidcUserContext, OidcFeatures } from "./types.js";
+import { ASYMMETRIC_ALGORITHMS, isAsymmetricAlgorithm } from "./algorithms.js";
+import { DEFAULT_CLAIM_MAPPING } from "./claims.js";
+import { OidcTokenError } from "./errors.js";
+import type {
+  OidcClaimMapping,
+  OidcConfig,
+  OidcFeatures,
+  OidcUserContext,
+} from "./types.js";
 
 /**
  * In-process JWKS cache.
@@ -8,22 +16,22 @@ import type { OidcConfig, OidcUserContext, OidcFeatures } from "./types.js";
  */
 const jwksCache = new Map<string, ReturnType<typeof jose.createRemoteJWKSet>>();
 
-/**
- * Return the JWKS URI for the given config.
- * Prefers an explicit `jwksUri` override; falls back to the standard path.
- */
+function providerOf(config: OidcConfig): "auth-service" | "oidc" {
+  return config.provider ?? "auth-service";
+}
+
+/** Return the JWKS URI for the given config. */
 function resolveJwksUri(config: OidcConfig): string {
   if (config.jwksUri) return config.jwksUri;
   const base = config.authServiceUrl.replace(/\/$/, "");
-  return `${base}/api/auth/jwks`;
+  return providerOf(config) === "auth-service"
+    ? `${base}/api/auth/jwks`
+    : `${base}/.well-known/jwks.json`;
 }
 
-/**
- * Return the issuer string for the given config.
- * Must match the `iss` claim in the JWT.
- */
+/** Return the issuer string for the given config. */
 function resolveIssuer(config: OidcConfig): string {
-  if (config.issuer) return config.issuer;
+  if (config.issuer) return config.issuer.replace(/\/$/, "");
   return config.authServiceUrl.replace(/\/$/, "");
 }
 
@@ -41,57 +49,95 @@ function getJwks(jwksUri: string): ReturnType<typeof jose.createRemoteJWKSet> {
   return keyset;
 }
 
-/**
- * Default allow-list of asymmetric JWS algorithms.
- * Symmetric (`HS*`) and `none` are excluded to prevent algorithm-confusion.
- */
-const DEFAULT_ALGORITHMS = [
-  "RS256",
-  "RS384",
-  "RS512",
-  "PS256",
-  "PS384",
-  "PS512",
-  "ES256",
-  "ES384",
-  "ES512",
-  "EdDSA",
-] as const;
+function stringClaim(
+  payload: Record<string, unknown>,
+  name: string,
+): string | undefined {
+  const value = payload[name];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function stringArrayClaim(
+  payload: Record<string, unknown>,
+  name: string,
+): string[] {
+  const value = payload[name];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function objectClaim(
+  payload: Record<string, unknown>,
+  name: string,
+): OidcFeatures {
+  const value = payload[name];
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? (value as OidcFeatures)
+    : {};
+}
+
+function resolveAlgorithms(config: OidcConfig): string[] {
+  const requested = config.algorithms ?? ASYMMETRIC_ALGORITHMS;
+  const accepted = requested.filter(isAsymmetricAlgorithm);
+  if (accepted.length === 0) {
+    throw new Error(
+      "[ioserver-oidc] No asymmetric JWS algorithm is configured.",
+    );
+  }
+  return [...accepted];
+}
+
+function authorizedPartyOf(
+  payload: Record<string, unknown>,
+  claims: OidcClaimMapping,
+): string | undefined {
+  for (const claim of claims.authorizedParty) {
+    const value = stringClaim(payload, claim);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
 
 /**
- * Verify an OIDC/OAuth2 JWT access token issued by auth-service.
+ * Verify an OIDC/OAuth2 JWT access token.
  *
  * 1. Resolves the JWKS URI and issuer from `config`.
- * 2. Verifies the RS/EC signature against the cached remote JWKS, restricting
+ * 2. Verifies the signature against the cached remote JWKS, restricting
  *    accepted algorithms to an asymmetric allow-list.
  * 3. Validates `iss`, expiry, `aud`, and the authorized party
  *    (`azp` / `client_id`) against `appSlug`.
  * 4. Maps standard + custom claims to `OidcUserContext`.
  *
- * Throws a `jose` `JWTVerifyError` (or subclass) on any failure.
+ * Throws a `jose` `JWTVerifyError` (or subclass) on signature/claim failure,
+ * and `OidcTokenError` when a `client_credentials` token is refused.
  */
 export async function verifyOidcToken(
   token: string,
   config: OidcConfig,
 ): Promise<OidcUserContext> {
+  if (token.length === 0 || token.length > 16_384) {
+    throw new OidcTokenError(
+      "ERR_AUTH_TOKEN_INVALID",
+      "access token is empty or exceeds the maximum accepted size",
+    );
+  }
+
+  const provider = providerOf(config);
+  const claims = config.claims ?? DEFAULT_CLAIM_MAPPING;
   const jwksUri = resolveJwksUri(config);
   const issuer = resolveIssuer(config);
   const keyset = getJwks(jwksUri);
 
-  // `audience` resolution:
-  //  - New @better-auth/oauth-provider (v1.5+): aud = `resource` URL sent
-  //    during the auth request (RFC 8707). Use config.audience (set via
-  //    AUTH_SERVICE_AUDIENCE env var).
-  //  - Legacy oidc-provider plugin: aud = client_id (= appSlug). Falls back
-  //    to config.appSlug when config.audience is not set.
+  // auth-service issues a JWT for an RFC 8707 resource; legacy deployments
+  // used the client_id as the audience. Generic providers choose explicitly.
   const audience = config.audience ?? config.appSlug;
 
   const { payload } = await jose.jwtVerify(token, keyset, {
     issuer,
     audience,
-    algorithms: (config.algorithms as string[] | undefined) ?? [
-      ...DEFAULT_ALGORITHMS,
-    ],
+    algorithms: resolveAlgorithms(config),
+    clockTolerance: config.clockToleranceSeconds ?? 5,
   });
 
   const p = payload as Record<string, unknown>;
@@ -107,18 +153,13 @@ export async function verifyOidcToken(
   // We therefore bind the token to this application via the authorized party:
   //   - `azp` (OIDC) or `client_id` (OAuth2) MUST equal `appSlug` when present.
   //   - In resource-audience mode, the party claim MUST be present.
-  const authorizedParty =
-    typeof p["azp"] === "string"
-      ? (p["azp"] as string)
-      : typeof p["client_id"] === "string"
-        ? (p["client_id"] as string)
-        : undefined;
+  const authorizedParty = authorizedPartyOf(p, claims);
 
   const audienceIsResource =
     config.audience !== undefined && config.audience !== config.appSlug;
 
   if (authorizedParty === undefined) {
-    if (audienceIsResource) {
+    if (audienceIsResource && config.appSlug) {
       throw new jose.errors.JWTClaimValidationFailed(
         'missing "azp" (authorized party) claim',
         payload,
@@ -126,7 +167,7 @@ export async function verifyOidcToken(
         "missing",
       );
     }
-  } else if (authorizedParty !== config.appSlug) {
+  } else if (config.appSlug && authorizedParty !== config.appSlug) {
     throw new jose.errors.JWTClaimValidationFailed(
       'unexpected "azp" (authorized party) claim',
       payload,
@@ -135,43 +176,62 @@ export async function verifyOidcToken(
     );
   }
 
-  // `sub` is guaranteed by jwtVerify (it checks for its presence)
-  const sub = payload.sub as string;
+  // `jwtVerify` only checks that `sub` is present; enforce the string shape.
+  const sub = payload.sub;
+  if (typeof sub !== "string" || sub.length === 0) {
+    throw new jose.errors.JWTClaimValidationFailed(
+      'invalid "sub" claim',
+      payload,
+      "sub",
+      "check_failed",
+    );
+  }
 
-  // Strictly keep only string elements — a malformed claim (e.g. numbers or
-  // objects) must not leak into role/permission checks downstream.
-  const roles = Array.isArray(p["roles"])
-    ? (p["roles"] as unknown[]).filter(
-        (r): r is string => typeof r === "string",
-      )
-    : [];
+  // A client_credentials token has no end user: auth-service sets sub = azp.
+  const isMachine =
+    provider === "auth-service" &&
+    authorizedParty !== undefined &&
+    sub === authorizedParty;
 
-  const permissions = Array.isArray(p["permissions"])
-    ? (p["permissions"] as unknown[]).filter(
-        (x): x is string => typeof x === "string",
-      )
-    : [];
+  if (isMachine && config.allowMachineTokens !== true) {
+    throw new OidcTokenError(
+      "ERR_MACHINE_TOKEN_FORBIDDEN",
+      "client_credentials tokens are not accepted for user authentication",
+    );
+  }
 
-  const features: OidcFeatures =
-    p["features"] != null && typeof p["features"] === "object"
-      ? (p["features"] as OidcFeatures)
-      : {};
-
-  // Primary role: first element of the roles array, fallback "user"
-  const userRole = roles[0] ?? "user";
-
-  const org_id = typeof p["org_id"] === "string" ? p["org_id"] : undefined;
+  const roles = stringArrayClaim(p, claims.roles);
+  const permissions = stringArrayClaim(p, claims.permissions);
+  const features = objectClaim(p, claims.features);
+  const plan = stringClaim(p, claims.plan);
+  const sid = stringClaim(p, "sid");
+  const scope = stringClaim(p, "scope");
+  const email = stringClaim(p, claims.email) ?? null;
+  const name = stringClaim(p, claims.name) ?? null;
+  const picture = stringClaim(p, claims.picture) ?? null;
+  const company = stringClaim(p, claims.company) ?? null;
+  const emailVerified =
+    typeof p["email_verified"] === "boolean" ? p["email_verified"] : undefined;
 
   const ctx: OidcUserContext = {
-    userId: sub, // will be replaced by DB id after findOrCreate in middleware
+    userId: sub, // replaced by the local DB id after findOrCreate in middleware
     sub,
-    email: typeof p["email"] === "string" ? p["email"] : null,
-    name: typeof p["name"] === "string" ? p["name"] : null,
-    userRole,
+    email,
+    name,
+    userRole: roles[0] ?? "user",
     roles,
     permissions,
     features,
   };
-  if (org_id !== undefined) ctx.org_id = org_id;
+  if (emailVerified !== undefined) ctx.emailVerified = emailVerified;
+  if (picture !== null) ctx.picture = picture;
+  if (company !== null) ctx.company = company;
+  if (plan !== undefined) ctx.plan = plan;
+  if (sid !== undefined) ctx.sid = sid;
+  if (authorizedParty !== undefined) ctx.clientId = authorizedParty;
+  if (scope !== undefined) ctx.scopes = scope.split(" ").filter(Boolean);
+  if (isMachine) ctx.isMachine = true;
+  const orgId = stringClaim(p, claims.orgId);
+  if (orgId !== undefined) ctx.org_id = orgId;
   return ctx;
 }
