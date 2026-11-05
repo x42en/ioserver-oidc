@@ -73,7 +73,7 @@ with JWT access tokens.
 | Layer       | Technology                                             |
 | ----------- | ------------------------------------------------------ |
 | Runtime     | Node.js 22+ (ESM)                                      |
-| Framework   | IOServer 2.2+ (Fastify 5 + Socket.IO 4)                |
+| Framework   | IOServer 2.3+ (Fastify 5 + Socket.IO 4)                |
 | Tokens      | `jose` (remote JWKS, JWT verification)                 |
 | Native SDK  | `@circle-rd/auth-ai` (wallet, gateway, logout, claims) |
 | Validation  | Zod (wallet responses)                                 |

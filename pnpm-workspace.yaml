@@ -22,14 +22,15 @@ overrides:
 # pnpm's `minimumReleaseAge` supply-chain policy is active in this install
 # ("Verifying lockfile against supply-chain policies"): a version published
 # less than 24 h ago is rejected, and that is what
-# ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION reports. ioserver@2.2.1 — the floor
-# this change raises to, released with the corrected fastify/@fastify/static
-# ranges — was published inside that window, so without this entry a clean-room
-# `pnpm install --frozen-lockfile` fails outright and the whole remediation is
-# undeliverable. pnpm writes the entry itself; it is listed here rather than
-# left to be regenerated so the exception is visible to review. Drop it once
-# ioserver@2.2.1 has aged past the cutoff.
+# ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION reports. ioserver@2.3.0 — the floor
+# this package now requires — was published inside that window, so without this
+# entry a clean-room `pnpm install --frozen-lockfile` fails outright. pnpm
+# writes the entry itself; it is listed here rather than left to be regenerated
+# so the exception is visible to review. Drop it once ioserver@2.3.0 has aged
+# past the cutoff.
 minimumReleaseAgeExclude:
-  - ioserver@2.2.1
+  - ioserver@2.3.0
   # Newly published dependency of the native auth-service integration.
-  - '@circle-rd/auth-ai@0.2.0'
+  - "@circle-rd/auth-ai@0.2.0"
+  # Static-file plugin released with the security fixes; pulled by ioserver.
+  - "@fastify/static@10.1.10"

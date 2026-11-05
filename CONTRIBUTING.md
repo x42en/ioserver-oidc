@@ -27,7 +27,7 @@ Thank you for your interest in contributing to ioserver-oidc! This document cove
 - Node.js ≥ 22
 - pnpm 12.9.1 (declared by the `packageManager` field in `package.json`) — `corepack enable` or `npm install -g pnpm@12.9.1`
 - TypeScript ≥ 6.0
-- An IOServer project as peer dependency (≥ 2.2.1)
+- An IOServer project as peer dependency (≥ 2.3.0)
 
 ## Development setup
 

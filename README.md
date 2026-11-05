@@ -47,7 +47,7 @@
 | Dependency         | Version |
 | ------------------ | ------- |
 | Node.js            | ≥ 22    |
-| ioserver           | ≥ 2.2.1 |
+| ioserver           | ≥ 2.3.0 |
 | TypeScript         | ≥ 6.0   |
 | @circle-rd/auth-ai | ≥ 0.2   |
 

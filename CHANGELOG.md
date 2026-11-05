@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-11-05
+
+### Changed
+
+- **`ioserver` baseline raised to 2.3.0** — the peer-dependency floor and the
+  development dependency move from `>=2.2.1` / `^2.2.1` to `>=2.3.0` /
+  `^2.3.0`, and the README, installation guide, contributor guide and agent
+  contract now state 2.3.0. No code change is required: the middlewares,
+  verifier and helpers only use `BaseManager`, `BaseMiddleware`, `AppHandle`
+  and the Fastify instance, whose contracts are unchanged between 2.2.1 and
+  2.3.0.
+- The LiteLLM gateway, wallet and entitlement helpers continue to come from
+  `@circle-rd/auth-ai`; `ioserver` itself exposes no LiteLLM feature in either
+  the 2.2.x or the 2.3.x line.
+- `pnpm-workspace.yaml` records the 2.3.0 release-age exception so a clean-room
+  `pnpm install --frozen-lockfile` keeps working until the release ages past
+  the policy cutoff.
+
 ## [0.3.0] — 2026-11-04
 
 ### Added
@@ -178,7 +196,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full TypeScript declarations and ESM-only distribution.
 - GitHub Actions workflow for automated npm publishing on version tags.
 
-[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/x42en/ioserver-oidc/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/x42en/ioserver-oidc/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/x42en/ioserver-oidc/compare/v0.2.2...v0.2.3
 [0.2.0]: https://github.com/x42en/ioserver-oidc/compare/v0.1.4...v0.2.0
