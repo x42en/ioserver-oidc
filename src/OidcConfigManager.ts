@@ -151,6 +151,15 @@ export function buildConfig(): OidcConfig {
   );
   const tokenType =
     env["OIDC_TOKEN_TYP"]?.trim() ?? env["AUTH_SERVICE_TOKEN_TYP"]?.trim();
+  const resourceMetadataUrl = env["OIDC_RESOURCE_METADATA_URL"]?.trim();
+  if (resourceMetadataUrl) {
+    assertHttpUrl(
+      resourceMetadataUrl,
+      "OIDC_RESOURCE_METADATA_URL",
+      allowInsecureHttp,
+    );
+  }
+  const scopesSupported = parseList(env["OIDC_SCOPES_SUPPORTED"], []);
   const gatewayUrlValue = env["AUTH_SERVICE_GATEWAY_URL"]?.trim();
   const gatewayUrl = gatewayUrlValue
     ? assertHttpUrl(
@@ -161,7 +170,7 @@ export function buildConfig(): OidcConfig {
     : undefined;
 
   if (provider === "oidc") {
-    const issuer = env["OIDC_ISSUER"]?.trim().replace(/\/$/, "");
+    const issuer = env["OIDC_ISSUER"]?.trim();
     const jwksUri = env["OIDC_JWKS_URI"]?.trim();
     const audience = env["OIDC_AUDIENCE"]?.trim();
     const appSlug = env["OIDC_CLIENT_ID"]?.trim();
@@ -207,6 +216,8 @@ export function buildConfig(): OidcConfig {
       audience,
       ...(algorithms.length > 0 ? { algorithms } : {}),
       ...(tokenType ? { tokenType } : {}),
+      ...(resourceMetadataUrl ? { resourceMetadataUrl } : {}),
+      ...(scopesSupported.length > 0 ? { scopesSupported } : {}),
       clockToleranceSeconds,
       allowMachineTokens: parseBoolean(env["OIDC_ALLOW_MACHINE_TOKENS"], false),
       adminRoles,
@@ -252,6 +263,8 @@ export function buildConfig(): OidcConfig {
       ? { audience: env["AUTH_SERVICE_AUDIENCE"].trim() }
       : {}),
     ...(tokenType ? { tokenType } : {}),
+    ...(resourceMetadataUrl ? { resourceMetadataUrl } : {}),
+    ...(scopesSupported.length > 0 ? { scopesSupported } : {}),
     clockToleranceSeconds,
     allowMachineTokens: parseBoolean(
       env["AUTH_SERVICE_ALLOW_MACHINE_TOKENS"],

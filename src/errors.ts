@@ -6,6 +6,8 @@ export type OidcErrorCode =
   | "ERR_ACCOUNT_DISABLED"
   | "ERR_USER_PROVISION_FAILED"
   | "ERR_OIDC_CONFIG"
+  | "ERR_RESOURCE_FORBIDDEN"
+  | "ERR_RESOURCE_CONFIG"
   | "ERR_FORBIDDEN";
 
 /**
@@ -21,5 +23,20 @@ export class OidcTokenError extends Error {
     super(message, options);
     this.name = "OidcTokenError";
     this.code = code;
+  }
+}
+
+/** Resource-sharing admission or configuration failure. */
+export class OidcResourceError extends Error {
+  readonly code: OidcErrorCode;
+  readonly statusCode: number;
+  readonly status: number;
+
+  constructor(code: OidcErrorCode, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "OidcResourceError";
+    this.code = code;
+    this.statusCode = code === "ERR_RESOURCE_FORBIDDEN" ? 403 : 500;
+    this.status = this.statusCode;
   }
 }

@@ -1,5 +1,6 @@
 import { BaseMiddleware } from "ioserver";
 import type { AppHandle } from "ioserver";
+import { bearerChallenge } from "@circle-rd/auth-ai/server";
 import { verifyOidcToken } from "./jwks.js";
 import { buildConfig } from "./OidcConfigManager.js";
 import { applyAuthContext } from "./context.js";
@@ -52,6 +53,22 @@ interface LocalUser {
 export class OidcHttpMiddleware extends BaseMiddleware {
   private _config: OidcConfig | null = null;
 
+  private _challenge(
+    config: OidcConfig,
+    error?: "invalid_token" | "insufficient_scope",
+  ): string {
+    if (!config.resourceMetadataUrl) {
+      return 'Bearer realm="api"';
+    }
+    return bearerChallenge({
+      resourceMetadataUrl: config.resourceMetadataUrl,
+      ...(error ? { error } : {}),
+      ...(config.scopesSupported && config.scopesSupported.length > 0
+        ? { scope: config.scopesSupported.join(" ") }
+        : {}),
+    });
+  }
+
   handle(appHandle: AppHandle) {
     return async (request: HttpRequestLike, reply: HttpReplyLike) => {
       reply.header?.("vary", "authorization");
@@ -83,7 +100,7 @@ export class OidcHttpMiddleware extends BaseMiddleware {
           ? /^Bearer\s+(.+)$/i.exec(authHeader.trim())
           : null;
       if (!bearerMatch?.[1]) {
-        reply.header?.("www-authenticate", 'Bearer realm="api"');
+        reply.header?.("www-authenticate", this._challenge(this._config));
         reply.code(401).send({
           statusCode: 401,
           error: "Unauthorized",
@@ -108,7 +125,10 @@ export class OidcHttpMiddleware extends BaseMiddleware {
           err instanceof OidcTokenError ? err.code : "ERR_AUTH_TOKEN_INVALID";
         const statusCode = code === "ERR_MACHINE_TOKEN_FORBIDDEN" ? 403 : 401;
         if (statusCode === 401) {
-          reply.header?.("www-authenticate", 'Bearer realm="api"');
+          reply.header?.(
+            "www-authenticate",
+            this._challenge(this._config, "invalid_token"),
+          );
         }
         reply.code(statusCode).send({
           statusCode,

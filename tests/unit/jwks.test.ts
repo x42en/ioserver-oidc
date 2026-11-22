@@ -626,3 +626,29 @@ describe("jwks — generic machine tokens", () => {
     expect(ctx.isMachine).toBe(true);
   });
 });
+
+describe("jwks — issuer normalization", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreateRemoteJWKSet.mockReturnValue({ _keyset: true });
+  });
+
+  it("preserves a path-based issuer with a trailing slash", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "my-app" },
+    });
+
+    await verifyOidcToken("tok", {
+      ...{ authServiceUrl: "https://idp.example.com", appSlug: "my-app" },
+      issuer: "https://idp.example.com/tenant/",
+    });
+
+    expect(mockJwtVerify).toHaveBeenCalledWith(
+      "tok",
+      expect.anything(),
+      expect.objectContaining({
+        issuer: "https://idp.example.com/tenant/",
+      }),
+    );
+  });
+});

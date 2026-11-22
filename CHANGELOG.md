@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-11-22
+
+### Added
+
+- **auth-ai 0.4.0** — upgraded the SDK dependency and aligned the public API
+  with the published tarball (`ResourcesApi`, resource webhooks,
+  `listAggregates`/`getAggregate`).
+- **`OidcMachineManager`** — exposes the confidential auth-service machine API
+  through `appHandle.oidcMachine` (`resources`, `billing`, `consumption`). The
+  client secret comes from `AUTH_SERVICE_CLIENT_SECRET` and is never stored in
+  `OidcConfig` or logged.
+- **Resource helpers** — `requireResourceAccess()` (fail-closed), plus
+  `listAccessibleResources`, `validateResource`, `invalidateResource` and
+  `recordResourceUsage`.
+- **Resource webhooks** — `registerResourceWebhook()` verifies
+  `X-Auth-Service-Signature` over the raw body with an encapsulated JSON parser,
+  deduplicates on `eventId` and keeps every other JSON route unchanged.
+- **Protected-resource metadata** — `buildProtectedResourceMetadata()` and
+  `registerProtectedResourceMetadata()` serve RFC 9728 metadata;
+  `OIDC_RESOURCE_METADATA_URL` and `OIDC_SCOPES_SUPPORTED` add
+  `resource_metadata`/`scope` to the Bearer challenge.
+- **Context** — `OidcUserContext.audiences` exposes the verified `aud` values.
+- **Re-exports** — auth-ai server primitives (`MachineApi`, `ResourcesApi`,
+  `createMachineApi`, `verifyResourceEvent`, `createBearerVerifier`,
+  `requireScopes`, `bearerChallenge`, protected-resource helpers and their
+  types), `RESOURCE_SELF_SCOPE` and `isAuthAiErrorCode`.
+- **New error codes** — `ERR_RESOURCE_FORBIDDEN` and `ERR_RESOURCE_CONFIG`.
+
+### Fixed
+
+- Path-based issuers keep their trailing slash; derived JWKS/redirect URLs use
+  a safe join instead of stripping the issuer.
+- Back-channel logout now documents and tests auth-ai's `200` response and
+  exposes `allowMissingTyp` for known non-conforming providers.
+- Bearer parsing remains case-insensitive and the access-token `aud` is
+  available to resource decisions.
+- `OidcConfigManager` now validates environment variables in its constructor
+  and fails startup on invalid configuration.
+
+### Security
+
+- Resource authorization treats deny, timeout, malformed answers and SDK
+  failures as a refusal; only an explicit `allow` returns.
+- Webhook verification uses the raw body and constant-time HMAC validation from
+  auth-ai; stale timestamps and replayed `eventId` values are rejected.
+- Machine API and webhook secrets are read from the environment, are never
+  serialized into configuration, and are never written to logs.
+
 ## [0.3.2] — 2026-11-22
 
 ### Security
@@ -246,7 +294,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full TypeScript declarations and ESM-only distribution.
 - GitHub Actions workflow for automated npm publishing on version tags.
 
-[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/x42en/ioserver-oidc/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/x42en/ioserver-oidc/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/x42en/ioserver-oidc/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/x42en/ioserver-oidc/compare/v0.2.3...v0.3.0

@@ -8,7 +8,7 @@ import type {
   BackchannelLogoutEvent,
   ReplayStore,
 } from "@circle-rd/auth-ai/server";
-import { assertHttpUrl, isInsecureHttpAllowed } from "./url.js";
+import { assertHttpUrl, isInsecureHttpAllowed, joinUrl } from "./url.js";
 import type { OidcConfig } from "./types.js";
 
 interface FastifyRequestLike {
@@ -58,6 +58,8 @@ export interface RegisterBackchannelLogoutOptions {
   readonly redirectUri?: string;
   /** Allow plain HTTP for a controlled non-loopback development service. */
   readonly allowInsecureHttp?: boolean;
+  /** Accept a missing logout-token `typ` for a known non-conforming provider. */
+  readonly allowMissingTyp?: boolean;
   /** Called for every accepted logout token. */
   readonly onLogout: (event: BackchannelLogoutEvent) => Promise<void> | void;
   readonly replayStore?: ReplayStore;
@@ -124,7 +126,7 @@ function toWebRequest(
  * ```
  *
  * The handler verifies the logout token with the auth-ai SDK (signature,
- * `typ`, audience, event, lifetime and replay) and returns `204` on success.
+ * `typ`, audience, event, lifetime and replay) and returns `200` on success.
  * Responses never carry error detail.
  */
 export function registerBackchannelLogout(
@@ -148,6 +150,9 @@ export function registerBackchannelLogout(
     auth,
     onLogout: options.onLogout,
     replayStore: options.replayStore ?? new MemoryReplayStore(),
+    ...(options.allowMissingTyp === undefined
+      ? {}
+      : { allowMissingTyp: options.allowMissingTyp }),
     ...(options.onError ? { onError: options.onError } : {}),
   });
 
@@ -193,7 +198,7 @@ function buildAuthClient(
     );
   }
   const issuer = assertHttpUrl(
-    (config.issuer ?? config.authServiceUrl).replace(/\/$/, ""),
+    config.issuer ?? config.authServiceUrl,
     "issuer",
     isInsecureHttpAllowed(options.allowInsecureHttp),
   );
@@ -205,6 +210,7 @@ function buildAuthClient(
   return createAuthClient({
     issuer,
     clientId: config.appSlug,
-    redirectUri: options.redirectUri ?? `${issuer}/__ioserver_oidc_callback`,
+    redirectUri:
+      options.redirectUri ?? joinUrl(issuer, "__ioserver_oidc_callback"),
   });
 }

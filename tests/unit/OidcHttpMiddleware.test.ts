@@ -256,6 +256,28 @@ describe("OidcHttpMiddleware", () => {
     expect(getConfig).toHaveBeenCalledTimes(1);
   });
 
+  it("advertises protected-resource metadata in the Bearer challenge", async () => {
+    const config = {
+      authServiceUrl: "https://auth.example.com",
+      appSlug: "my-app",
+      audience: "https://api.example.com",
+      resourceMetadataUrl:
+        "https://api.example.com/.well-known/oauth-protected-resource",
+      scopesSupported: ["gine:read"],
+    };
+    const { handler } = getInstance({
+      oidcConfig: { getConfig: () => config },
+    });
+    const reply = makeReply();
+
+    await handler(makeRequest(undefined), reply);
+
+    expect(reply._headers["www-authenticate"]).toContain(
+      'resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"',
+    );
+    expect(reply._headers["www-authenticate"]).toContain('scope="gine:read"');
+  });
+
   it("returns 503 when the OIDC config manager is not ready", async () => {
     const appHandle = makeAppHandle({
       oidcConfig: {

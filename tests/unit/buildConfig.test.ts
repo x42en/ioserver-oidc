@@ -193,9 +193,11 @@ describe("buildConfig() — provider and auth-service options", () => {
 
     expect(config.provider).toBe("oidc");
     expect(config.authServiceUrl).toBe(
-      "https://login.microsoftonline.com/tenant/v2.0",
+      "https://login.microsoftonline.com/tenant/v2.0/",
     );
-    expect(config.issuer).toBe("https://login.microsoftonline.com/tenant/v2.0");
+    expect(config.issuer).toBe(
+      "https://login.microsoftonline.com/tenant/v2.0/",
+    );
     expect(config.appSlug).toBe("client-123");
     expect(config.audience).toBe("api://my-api");
     expect(config.algorithms).toEqual(["RS256", "RS384"]);
@@ -318,5 +320,30 @@ describe("buildConfig() — algorithm allow-list", () => {
     process.env["OIDC_ALGORITHMS"] = "RS256,HS256,none";
 
     expect(() => buildConfig()).toThrow(/only accepts asymmetric/);
+  });
+});
+
+describe("buildConfig() — protected resource metadata", () => {
+  it("reads the metadata URL and supported scopes", () => {
+    process.env["AUTH_SERVICE_URL"] = "https://auth.example.com";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+    process.env["OIDC_RESOURCE_METADATA_URL"] =
+      "https://api.example.com/.well-known/oauth-protected-resource";
+    process.env["OIDC_SCOPES_SUPPORTED"] = "gine:read,gine:write";
+
+    const config = buildConfig();
+
+    expect(config.resourceMetadataUrl).toBe(
+      "https://api.example.com/.well-known/oauth-protected-resource",
+    );
+    expect(config.scopesSupported).toEqual(["gine:read", "gine:write"]);
+  });
+
+  it("rejects an insecure metadata URL", () => {
+    process.env["AUTH_SERVICE_URL"] = "https://auth.example.com";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+    process.env["OIDC_RESOURCE_METADATA_URL"] = "http://api.example.com/meta";
+
+    expect(() => buildConfig()).toThrow(/OIDC_RESOURCE_METADATA_URL/);
   });
 });

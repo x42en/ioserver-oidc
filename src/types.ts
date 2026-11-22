@@ -131,6 +131,15 @@ export interface OidcConfig {
   readonly gatewayUrl?: string;
 
   /**
+   * Public URL of the protected-resource metadata document, used in the
+   * `WWW-Authenticate` challenge (RFC 9728).
+   */
+  readonly resourceMetadataUrl?: string;
+
+  /** Scopes advertised by the protected-resource metadata endpoint. */
+  readonly scopesSupported?: readonly string[];
+
+  /**
    * Claim names used to map the token payload to `OidcUserContext`.
    * Native and generic defaults match auth-service.
    */
@@ -202,6 +211,9 @@ export interface OidcUserContext {
 
   /** Granted scopes split from the `scope` claim. */
   scopes?: string[];
+
+  /** Audiences (`aud`) carried by the verified token. */
+  audiences?: string[];
 
   /** True when the token is a `client_credentials` token (no end user). */
   isMachine?: boolean;

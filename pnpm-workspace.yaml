@@ -30,7 +30,6 @@ overrides:
 # past the cutoff.
 minimumReleaseAgeExclude:
   - ioserver@2.3.0
-  # Newly published dependency of the native auth-service integration.
-  - "@circle-rd/auth-ai@0.2.0"
+  - "@circle-rd/auth-ai@0.4.0"
   # Static-file plugin released with the security fixes; pulled by ioserver.
   - "@fastify/static@10.1.10"
