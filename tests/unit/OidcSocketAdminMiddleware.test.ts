@@ -108,7 +108,7 @@ describe("OidcSocketAdminMiddleware — configurable roles", () => {
     }
   });
 
-  it("falls back to environment roles when the config manager is not ready", () => {
+  it("denies admin access when the config manager is not ready", () => {
     process.env["OIDC_ADMIN_ROLES"] = "admin";
     try {
       const appHandle = {
@@ -126,13 +126,13 @@ describe("OidcSocketAdminMiddleware — configurable roles", () => {
 
       handler({ roles: ["admin"] } as any, next);
 
-      expect(next).toHaveBeenCalledWith();
+      expect(next).toHaveBeenCalledWith(new Error("ERR_FORBIDDEN"));
     } finally {
       delete process.env["OIDC_ADMIN_ROLES"];
     }
   });
 
-  it("falls back to admin when the env list is empty", () => {
+  it("denies admin access when the env list is explicitly empty", () => {
     process.env["AUTH_SERVICE_ADMIN_ROLES"] = " , ";
     try {
       const appHandle = { log: vi.fn() };
@@ -143,9 +143,21 @@ describe("OidcSocketAdminMiddleware — configurable roles", () => {
 
       handler({ roles: ["admin"] } as any, next);
 
-      expect(next).toHaveBeenCalledWith();
+      expect(next).toHaveBeenCalledWith(new Error("ERR_FORBIDDEN"));
     } finally {
       delete process.env["AUTH_SERVICE_ADMIN_ROLES"];
     }
+  });
+
+  it("keeps the admin default when no manager and no env are configured", () => {
+    const appHandle = { log: vi.fn() };
+    const handler = new OidcSocketAdminMiddleware(appHandle as any).handle(
+      appHandle as any,
+    );
+    const next = vi.fn();
+
+    handler({ roles: ["admin"] } as any, next);
+
+    expect(next).toHaveBeenCalledWith();
   });
 });

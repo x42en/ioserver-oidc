@@ -12,12 +12,11 @@ interface AdminSocketLike {
 function envAdminRoles(): readonly string[] {
   const value =
     process.env["OIDC_ADMIN_ROLES"] ?? process.env["AUTH_SERVICE_ADMIN_ROLES"];
-  if (!value) return ["admin"];
-  const roles = value
+  if (value === undefined) return ["admin"];
+  return value
     .split(",")
     .map((role) => role.trim())
     .filter(Boolean);
-  return roles.length > 0 ? roles : ["admin"];
 }
 
 /**
@@ -66,18 +65,20 @@ export class OidcSocketAdminMiddleware extends BaseMiddleware {
   }
 
   private _resolveAdminRoles(appHandle: AppHandle): readonly string[] {
-    try {
-      const config = appHandle["oidcConfig"]?.getConfig?.() as
-        OidcConfig | undefined;
-      if (config?.adminRoles && config.adminRoles.length > 0) {
-        return config.adminRoles;
+    const manager = appHandle["oidcConfig"];
+    if (typeof manager?.getConfig === "function") {
+      try {
+        const config = manager.getConfig() as OidcConfig | undefined;
+        return config?.adminRoles ?? [];
+      } catch {
+        // The manager exists but its configuration is unavailable: deny admin
+        // access instead of falling back to a possibly broader role list.
+        appHandle.log?.(
+          3,
+          "[OidcSocketAdminMiddleware] OIDC config unavailable; denying admin access.",
+        );
+        return [];
       }
-    } catch {
-      // Fail closed: a manager that is not ready must not grant admin access.
-      appHandle.log?.(
-        3,
-        "[OidcSocketAdminMiddleware] OIDC config unavailable; falling back to environment roles.",
-      );
     }
     return envAdminRoles();
   }

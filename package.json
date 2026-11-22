@@ -1,6 +1,6 @@
 {
   "name": "ioserver-oidc",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "IOServer middleware set for auth-service native OIDC and generic OAuth2/OIDC JWT authentication",
   "type": "module",
   "packageManager": "pnpm@12.9.1",

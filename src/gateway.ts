@@ -1,4 +1,5 @@
 import { GatewayClient } from "@circle-rd/auth-ai";
+import { assertHttpUrl, isInsecureHttpAllowed } from "./url.js";
 import type { OidcConfig } from "./types.js";
 
 export {
@@ -23,6 +24,13 @@ export interface AuthServiceGatewayOptions {
   readonly token: string;
   readonly fetch?: typeof fetch;
   readonly timeoutMs?: number;
+  /** Allow plain HTTP for a controlled non-loopback development service. */
+  readonly allowInsecureHttp?: boolean;
+}
+
+export interface RequestGatewayOptions {
+  /** Allow plain HTTP for a controlled non-loopback development service. */
+  readonly allowInsecureHttp?: boolean;
 }
 
 /**
@@ -35,7 +43,11 @@ export interface AuthServiceGatewayOptions {
 export function createGatewayClient(
   options: AuthServiceGatewayOptions,
 ): GatewayClient {
-  const gatewayUrl = options.gatewayUrl.replace(/\/$/, "");
+  const gatewayUrl = assertHttpUrl(
+    options.gatewayUrl.replace(/\/$/, ""),
+    "gatewayUrl",
+    isInsecureHttpAllowed(options.allowInsecureHttp),
+  );
   return new GatewayClient({
     gatewayUrl,
     tokens: {
@@ -57,6 +69,7 @@ export function createGatewayClient(
 export function createRequestGatewayClient(
   request: { authToken?: unknown },
   config: Pick<OidcConfig, "gatewayUrl">,
+  options: RequestGatewayOptions = {},
 ): GatewayClient {
   if (typeof request.authToken !== "string" || request.authToken.length === 0) {
     throw new Error(
@@ -71,5 +84,8 @@ export function createRequestGatewayClient(
   return createGatewayClient({
     gatewayUrl: config.gatewayUrl,
     token: request.authToken,
+    ...(options.allowInsecureHttp === undefined
+      ? {}
+      : { allowInsecureHttp: options.allowInsecureHttp }),
   });
 }

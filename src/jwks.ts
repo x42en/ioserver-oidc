@@ -123,7 +123,6 @@ export async function verifyOidcToken(
     );
   }
 
-  const provider = providerOf(config);
   const claims = config.claims ?? DEFAULT_CLAIM_MAPPING;
   const jwksUri = resolveJwksUri(config);
   const issuer = resolveIssuer(config);
@@ -133,14 +132,52 @@ export async function verifyOidcToken(
   // used the client_id as the audience. Generic providers choose explicitly.
   const audience = config.audience ?? config.appSlug;
 
-  const { payload } = await jose.jwtVerify(token, keyset, {
+  const { payload, protectedHeader } = await jose.jwtVerify(token, keyset, {
     issuer,
     audience,
     algorithms: resolveAlgorithms(config),
     clockTolerance: config.clockToleranceSeconds ?? 5,
+    requiredClaims: ["exp", "iss", "aud", "sub"],
+    ...(config.tokenType ? { typ: config.tokenType } : {}),
   });
 
   const p = payload as Record<string, unknown>;
+
+  const typ =
+    typeof protectedHeader?.typ === "string"
+      ? protectedHeader.typ.toLowerCase()
+      : undefined;
+  if (typ === "logout+jwt" || typ === "id+jwt") {
+    throw new jose.errors.JWTClaimValidationFailed(
+      'unexpected "typ" (token type) header',
+      payload,
+      "typ",
+      "check_failed",
+    );
+  }
+
+  if (
+    typeof p["token_use"] === "string" &&
+    p["token_use"].toLowerCase() !== "access"
+  ) {
+    throw new jose.errors.JWTClaimValidationFailed(
+      'invalid "token_use" claim',
+      payload,
+      "token_use",
+      "check_failed",
+    );
+  }
+
+  for (const marker of ["nonce", "at_hash", "c_hash"]) {
+    if (p[marker] !== undefined) {
+      throw new jose.errors.JWTClaimValidationFailed(
+        `unexpected "${marker}" claim on an access token`,
+        payload,
+        marker,
+        "check_failed",
+      );
+    }
+  }
 
   // ── Authorized-party binding (confused-deputy / cross-app defence) ────────
   //
@@ -187,11 +224,9 @@ export async function verifyOidcToken(
     );
   }
 
-  // A client_credentials token has no end user: auth-service sets sub = azp.
-  const isMachine =
-    provider === "auth-service" &&
-    authorizedParty !== undefined &&
-    sub === authorizedParty;
+  // A client_credentials token has no end user: the subject is the client.
+  // The same rule applies to native and generic providers.
+  const isMachine = authorizedParty !== undefined && sub === authorizedParty;
 
   if (isMachine && config.allowMachineTokens !== true) {
     throw new OidcTokenError(

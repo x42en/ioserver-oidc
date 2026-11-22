@@ -5,6 +5,7 @@ export type OidcErrorCode =
   | "ERR_MACHINE_TOKEN_FORBIDDEN"
   | "ERR_ACCOUNT_DISABLED"
   | "ERR_USER_PROVISION_FAILED"
+  | "ERR_OIDC_CONFIG"
   | "ERR_FORBIDDEN";
 
 /**

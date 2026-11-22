@@ -14,6 +14,7 @@ interface HttpRequestLike extends Record<string, unknown> {
 
 interface HttpReplyLike {
   code(statusCode: number): HttpReplyLike;
+  header?(name: string, value: string): HttpReplyLike;
   send(payload: unknown): void;
 }
 
@@ -53,14 +54,36 @@ export class OidcHttpMiddleware extends BaseMiddleware {
 
   handle(appHandle: AppHandle) {
     return async (request: HttpRequestLike, reply: HttpReplyLike) => {
+      reply.header?.("vary", "authorization");
+      reply.header?.("cache-control", "private, no-store");
+
       // ── 1. Resolve config (lazy, cached after first call) ─────────────
       if (!this._config) {
-        this._config = this._resolveConfig(appHandle);
+        try {
+          this._config = this._resolveConfig(appHandle);
+        } catch (err) {
+          appHandle.log(
+            3,
+            `[OidcHttpMiddleware] OIDC configuration unavailable: ${String(err)}`,
+          );
+          reply.code(503).send({
+            statusCode: 503,
+            error: "Service Unavailable",
+            code: "ERR_OIDC_CONFIG",
+            message: "Authentication is temporarily unavailable.",
+          });
+          return;
+        }
       }
 
       // ── 2. Extract Bearer token ────────────────────────────────────────
       const authHeader = request.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
+      const bearerMatch =
+        typeof authHeader === "string"
+          ? /^Bearer\s+(.+)$/i.exec(authHeader.trim())
+          : null;
+      if (!bearerMatch?.[1]) {
+        reply.header?.("www-authenticate", 'Bearer realm="api"');
         reply.code(401).send({
           statusCode: 401,
           error: "Unauthorized",
@@ -70,7 +93,7 @@ export class OidcHttpMiddleware extends BaseMiddleware {
         return;
       }
 
-      const token = authHeader.slice(7);
+      const token = bearerMatch[1].trim();
 
       // ── 3. Verify JWT ──────────────────────────────────────────────────
       let oidcCtx: OidcUserContext;
@@ -84,6 +107,9 @@ export class OidcHttpMiddleware extends BaseMiddleware {
         const code =
           err instanceof OidcTokenError ? err.code : "ERR_AUTH_TOKEN_INVALID";
         const statusCode = code === "ERR_MACHINE_TOKEN_FORBIDDEN" ? 403 : 401;
+        if (statusCode === 401) {
+          reply.header?.("www-authenticate", 'Bearer realm="api"');
+        }
         reply.code(statusCode).send({
           statusCode,
           error: statusCode === 403 ? "Forbidden" : "Unauthorized",
@@ -99,7 +125,10 @@ export class OidcHttpMiddleware extends BaseMiddleware {
       // ── 4. Auto-provision local user record ────────────────────────────
       let user: LocalUser | null = null;
 
-      if (typeof appHandle["users"]?.findOrCreate === "function") {
+      if (
+        !oidcCtx.isMachine &&
+        typeof appHandle["users"]?.findOrCreate === "function"
+      ) {
         try {
           user = (await appHandle["users"].findOrCreate(oidcCtx.sub, {
             email: oidcCtx.email,

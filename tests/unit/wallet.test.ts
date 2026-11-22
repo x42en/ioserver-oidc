@@ -189,3 +189,33 @@ describe("AuthServiceWalletClient — default fetch", () => {
     }
   });
 });
+
+describe("AuthServiceWalletClient — transport security", () => {
+  it("rejects plain HTTP for non-loopback auth-service URLs", () => {
+    expect(() =>
+      createWalletClient({
+        authServiceUrl: "http://auth.example.com",
+        token: "wallet-token",
+      }),
+    ).toThrow(/Invalid authServiceUrl/);
+  });
+
+  it("accepts loopback HTTP for local development", () => {
+    expect(() =>
+      createWalletClient({
+        authServiceUrl: "http://localhost:3000",
+        token: "wallet-token",
+      }),
+    ).not.toThrow();
+  });
+
+  it("accepts non-loopback HTTP only with an explicit opt-in", () => {
+    expect(() =>
+      createWalletClient({
+        authServiceUrl: "http://auth.example.com",
+        token: "wallet-token",
+        allowInsecureHttp: true,
+      }),
+    ).not.toThrow();
+  });
+});

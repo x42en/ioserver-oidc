@@ -93,3 +93,33 @@ describe("gateway helpers — default fetch and invalidation", () => {
     await expect(client.listModels()).rejects.toMatchObject({ code: "GW_003" });
   });
 });
+
+describe("gateway helpers — transport security", () => {
+  it("rejects plain HTTP for non-loopback gateway URLs", () => {
+    expect(() =>
+      createGatewayClient({
+        gatewayUrl: "http://llm.example.com",
+        token: "user-token",
+      }),
+    ).toThrow(/must use https/);
+  });
+
+  it("rejects non-HTTP gateway schemes", () => {
+    expect(() =>
+      createGatewayClient({
+        gatewayUrl: "javascript:alert",
+        token: "user-token",
+      }),
+    ).toThrow(/must use http or https/);
+  });
+
+  it("accepts non-loopback HTTP only with an explicit opt-in", () => {
+    expect(() =>
+      createGatewayClient({
+        gatewayUrl: "http://llm.example.com",
+        token: "user-token",
+        allowInsecureHttp: true,
+      }),
+    ).not.toThrow();
+  });
+});

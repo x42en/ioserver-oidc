@@ -85,6 +85,7 @@ export {
 } from "./gateway.js";
 export type {
   AuthServiceGatewayOptions,
+  RequestGatewayOptions,
   GatewayAgent,
   GatewayClientOptions,
   GatewayMcpServer,

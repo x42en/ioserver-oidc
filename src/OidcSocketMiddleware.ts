@@ -63,22 +63,30 @@ export class OidcSocketMiddleware extends BaseMiddleware {
     return async (socket: SocketLike, next: SocketNext) => {
       // ── 1. Resolve config (lazy, cached) ──────────────────────────────
       if (!this._config) {
-        this._config = this._resolveConfig(appHandle);
+        try {
+          this._config = this._resolveConfig(appHandle);
+        } catch (err) {
+          appHandle.log(
+            3,
+            `[OidcSocketMiddleware] OIDC configuration unavailable: ${String(err)}`,
+          );
+          return next(new Error("ERR_OIDC_CONFIG"));
+        }
       }
 
       // ── 2. Extract token ───────────────────────────────────────────────
       let token: string | undefined =
         typeof socket.handshake?.auth?.token === "string"
-          ? socket.handshake.auth.token
+          ? socket.handshake.auth.token.trim()
           : undefined;
 
       if (!token) {
         const authHeader = socket.handshake?.headers?.authorization;
-        if (
-          typeof authHeader === "string" &&
-          authHeader.startsWith("Bearer ")
-        ) {
-          token = authHeader.slice(7);
+        if (typeof authHeader === "string") {
+          const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
+          if (match?.[1]) {
+            token = match[1].trim();
+          }
         }
       }
 
@@ -103,7 +111,10 @@ export class OidcSocketMiddleware extends BaseMiddleware {
       // ── 4. Auto-provision local user record ────────────────────────────
       let user: LocalUser | null = null;
 
-      if (typeof appHandle["users"]?.findOrCreate === "function") {
+      if (
+        !oidcCtx.isMachine &&
+        typeof appHandle["users"]?.findOrCreate === "function"
+      ) {
         try {
           user = (await appHandle["users"].findOrCreate(oidcCtx.sub, {
             email: oidcCtx.email,
@@ -127,16 +138,24 @@ export class OidcSocketMiddleware extends BaseMiddleware {
 
       // ── 6. Register with session manager (if available) ──────────────
       if (typeof appHandle["session"]?.registerSocket === "function") {
-        const namespace = (socket.nsp?.name ?? "").replace(/^\//, "");
-        appHandle["session"].registerSocket(
-          socket,
-          namespace,
-          user?.email ?? oidcCtx.email ?? null,
-          user?.name ?? oidcCtx.name ?? null,
-        );
-        socket.on("disconnect", () => {
-          appHandle["session"]?.unregisterSocket?.(socket.id);
-        });
+        try {
+          const namespace = (socket.nsp?.name ?? "").replace(/^\//, "");
+          appHandle["session"].registerSocket(
+            socket,
+            namespace,
+            user?.email ?? oidcCtx.email ?? null,
+            user?.name ?? oidcCtx.name ?? null,
+          );
+          socket.on("disconnect", () => {
+            appHandle["session"]?.unregisterSocket?.(socket.id);
+          });
+        } catch (err) {
+          appHandle.log(
+            3,
+            `[OidcSocketMiddleware] session registration failed: ${String(err)}`,
+          );
+          return next(new Error("ERR_USER_PROVISION_FAILED"));
+        }
       }
 
       next();

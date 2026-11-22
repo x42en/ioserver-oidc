@@ -24,12 +24,18 @@ describe("OidcConfigManager", () => {
     };
   }
 
-  it("throws when getConfig() is called before start()", () => {
+  it("validates configuration in the constructor", () => {
     const appHandle = makeAppHandle();
     const manager = new OidcConfigManager(appHandle as any);
 
-    expect(() => manager.getConfig()).toThrow(
-      "[OidcConfigManager] getConfig() called before start()",
+    expect(manager.getConfig().authServiceUrl).toBe("https://auth.example.com");
+  });
+
+  it("fails fast when the environment is invalid", () => {
+    process.env["AUTH_SERVICE_URL"] = "http://auth.example.com";
+
+    expect(() => new OidcConfigManager(makeAppHandle() as any)).toThrow(
+      /must use https/,
     );
   });
 

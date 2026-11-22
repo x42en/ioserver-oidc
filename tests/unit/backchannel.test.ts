@@ -316,3 +316,18 @@ describe("registerBackchannelLogout()", () => {
     ).toThrow(/appSlug/);
   });
 });
+
+describe("registerBackchannelLogout — transport security", () => {
+  it("rejects plain HTTP issuer URLs for non-loopback hosts", () => {
+    const { app } = makeApp();
+    expect(() =>
+      registerBackchannelLogout(app, {
+        config: {
+          authServiceUrl: "http://auth.example.com",
+          appSlug: "my-app",
+        },
+        onLogout: vi.fn(),
+      }),
+    ).toThrow(/must use https/);
+  });
+});

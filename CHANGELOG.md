@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-11-22
+
+### Security
+
+- **Transport security** — `AUTH_SERVICE_URL`, issuer/JWKS URLs, the LiteLLM
+  gateway URL, wallet clients and back-channel logout now require HTTPS for
+  non-loopback hosts. Plain HTTP remains available for loopback development or
+  with the explicit `OIDC_ALLOW_INSECURE_HTTP` / `allowInsecureHttp` opt-in.
+- **Generic machine tokens** — `client_credentials` detection (`sub === azp`)
+  now applies to the generic OIDC provider. `OIDC_ALLOW_MACHINE_TOKENS` defaults
+  to `false` for both providers, and allowed machine tokens are never
+  auto-provisioned as local users.
+- **Token type checks** — `exp`, `iss`, `aud` and `sub` are required. Tokens
+  carrying ID-token markers (`nonce`, `at_hash`, `c_hash`), a non-`access`
+  `token_use`, or explicit `id+jwt`/`logout+jwt` types are rejected. A
+  dedicated access-token `typ` can be required via `tokenType` /
+  `OIDC_TOKEN_TYP` / `AUTH_SERVICE_TOKEN_TYP`.
+- **Socket.IO failure containment** — configuration and session-registration
+  failures now call `next(...)` instead of leaving the handshake pending.
+- **Admin fail-closed** — a registered but unavailable config manager denies
+  admin access instead of falling back to environment roles. An explicitly
+  empty admin-role list now denies all admin access.
+- **Config fail-fast** — `OidcConfigManager` validates its environment in the
+  constructor, so invalid configuration fails server startup.
+- `DEFAULT_CLAIM_MAPPING` is frozen to prevent runtime mutation.
+- Authenticated HTTP responses carry `Vary: Authorization` and
+  `Cache-Control: private, no-store`; 401 responses carry a Bearer challenge.
+- `OIDC_CLIENT_ID` is required in generic mode, so resource-audience tokens are
+  always bound to an authorized party.
+
+### Added
+
+- `ERR_OIDC_CONFIG` (HTTP 503 / Socket rejection) for unavailable OIDC
+  configuration.
+- `allowInsecureHttp` options on wallet/gateway/back-channel helpers and
+  `RequestGatewayOptions`.
+
+### Fixed
+
+- Documentation examples now use `buildConfig()` / `appHandle.oidcConfig`
+  instead of the removed `server.getManager()` API.
+- Bearer scheme parsing is case-insensitive and tolerates multiple spaces.
+
+### Changed
+
+- `OidcConfigManager.getConfig()` returns the validated configuration
+  immediately; it no longer throws before `start()`.
+- `OIDC_ADMIN_ROLES` / `AUTH_SERVICE_ADMIN_ROLES` no longer reset an explicitly
+  empty value to `["admin"]`.
+
 ## [0.3.1] — 2026-11-05
 
 ### Changed
@@ -196,7 +246,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full TypeScript declarations and ESM-only distribution.
 - GitHub Actions workflow for automated npm publishing on version tags.
 
-[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/x42en/ioserver-oidc/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/x42en/ioserver-oidc/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/x42en/ioserver-oidc/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/x42en/ioserver-oidc/compare/v0.2.2...v0.2.3
