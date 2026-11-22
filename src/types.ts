@@ -65,6 +65,7 @@ export interface OidcConfig {
   /**
    * The OAuth2 `client_id` / application slug (native mode), or the expected
    * authorized party (generic mode). Used to bind tokens to this application.
+   * Required in generic mode so cross-client token reuse is always checked.
    * Example: "mcp-central"
    */
   readonly appSlug: string;
@@ -106,9 +107,15 @@ export interface OidcConfig {
   readonly clockToleranceSeconds?: number;
 
   /**
-   * Accept `client_credentials` tokens (where `sub === azp`). Native default:
-   * `false`, because such a token has no end user to provision; generic
-   * default: `true`, preserving the previous behaviour.
+   * Required JOSE `typ` header value (for example `at+jwt`). When set, tokens
+   * with a different type are rejected before claim validation.
+   */
+  readonly tokenType?: string;
+
+  /**
+   * Accept `client_credentials` tokens (where `sub === azp`). Defaults to
+   * `false` for both providers: such a token has no end user to provision and
+   * must not reach user routes unless explicitly opted in.
    */
   readonly allowMachineTokens?: boolean;
 

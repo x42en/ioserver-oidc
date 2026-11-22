@@ -1,6 +1,6 @@
 {
   "name": "ioserver-oidc",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "IOServer middleware set for auth-service native OIDC and generic OAuth2/OIDC JWT authentication",
   "type": "module",
   "packageManager": "pnpm@12.9.1",
@@ -60,7 +60,7 @@
     "url": "https://github.com/x42en/ioserver-oidc/issues"
   },
   "peerDependencies": {
-    "ioserver": ">=2.2.1"
+    "ioserver": ">=2.3.0"
   },
   "dependencies": {
     "@circle-rd/auth-ai": "^0.2.0",
@@ -74,7 +74,7 @@
     "@typescript-eslint/parser": "^8.72.1",
     "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^10.14.0",
-    "ioserver": "^2.2.1",
+    "ioserver": "^2.3.0",
     "typescript": "^6.0.3",
     "vite": "^8.3.5",
     "vitest": "^5.1.0",

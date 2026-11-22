@@ -259,3 +259,88 @@ describe("OidcSocketMiddleware", () => {
     expect(getConfig).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("OidcSocketMiddleware — failure containment", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env["AUTH_SERVICE_URL"] = "https://auth.example.com";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+  });
+
+  it("calls next(ERR_OIDC_CONFIG) when config resolution throws", async () => {
+    const appHandle = {
+      log: vi.fn(),
+      oidcConfig: {
+        getConfig: () => {
+          throw new Error("not ready");
+        },
+      },
+    };
+    const handler = new OidcSocketMiddleware(appHandle as any).handle(
+      appHandle as any,
+    );
+    const next = vi.fn();
+
+    await handler(makeSocket("tok"), next);
+
+    expect(next).toHaveBeenCalledWith(new Error("ERR_OIDC_CONFIG"));
+  });
+
+  it("calls next(ERR_USER_PROVISION_FAILED) when session registration throws", async () => {
+    mockVerifyOidcToken.mockResolvedValue(makeOidcCtx());
+    const appHandle = {
+      log: vi.fn(),
+      session: {
+        registerSocket: () => {
+          throw new Error("session store down");
+        },
+      },
+    };
+    const handler = new OidcSocketMiddleware(appHandle as any).handle(
+      appHandle as any,
+    );
+    const next = vi.fn();
+
+    await handler(makeSocket("tok"), next);
+
+    expect(next).toHaveBeenCalledWith(new Error("ERR_USER_PROVISION_FAILED"));
+  });
+
+  it("does not provision a local user for an allowed machine token", async () => {
+    mockVerifyOidcToken.mockResolvedValue(
+      makeOidcCtx({ sub: "client-1", isMachine: true }),
+    );
+    const findOrCreate = vi.fn();
+    const appHandle = { log: vi.fn(), users: { findOrCreate } };
+    const handler = new OidcSocketMiddleware(appHandle as any).handle(
+      appHandle as any,
+    );
+    const socket = makeSocket("machine-token");
+    const next = vi.fn();
+
+    await handler(socket, next);
+
+    expect(findOrCreate).not.toHaveBeenCalled();
+    expect(socket.isMachine).toBe(true);
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("accepts a case-insensitive Bearer header", async () => {
+    mockVerifyOidcToken.mockResolvedValue(makeOidcCtx());
+    const appHandle = makeAppHandle();
+    const handler = new OidcSocketMiddleware(appHandle as any).handle(
+      appHandle as any,
+    );
+    const socket = makeSocket(undefined, "header-token");
+    socket.handshake.headers.authorization = "bearer   header-token";
+    const next = vi.fn();
+
+    await handler(socket, next);
+
+    expect(mockVerifyOidcToken).toHaveBeenCalledWith(
+      "header-token",
+      expect.anything(),
+    );
+    expect(next).toHaveBeenCalledWith();
+  });
+});

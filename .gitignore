@@ -4,8 +4,10 @@ dist/
 # Dependencies
 node_modules/
 
-# Lockfile (committed at repo level — keep it)
+# Lockfile (pnpm-lock.yaml is committed at repo level; the docs-site is a
+# separate npm-built package and its generated lockfile is not committed)
 # pnpm-lock.yaml
+docs-site/package-lock.json
 
 # OS artefacts
 .DS_Store

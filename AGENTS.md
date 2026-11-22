@@ -73,7 +73,7 @@ with JWT access tokens.
 | Layer       | Technology                                             |
 | ----------- | ------------------------------------------------------ |
 | Runtime     | Node.js 22+ (ESM)                                      |
-| Framework   | IOServer 2.2+ (Fastify 5 + Socket.IO 4)                |
+| Framework   | IOServer 2.3+ (Fastify 5 + Socket.IO 4)                |
 | Tokens      | `jose` (remote JWKS, JWT verification)                 |
 | Native SDK  | `@circle-rd/auth-ai` (wallet, gateway, logout, claims) |
 | Validation  | Zod (wallet responses)                                 |
@@ -170,12 +170,16 @@ src/
 
 - Signature verification is restricted to an asymmetric algorithm allow-list
   (`RS*`, `PS*`, `ES*`, `EdDSA`); `HS*` and `none` never qualify.
-- `iss` and `aud` are always validated. `azp` / `client_id` is bound to
-  `appSlug` and is mandatory in resource-audience mode when a client id is
-  configured.
-- `client_credentials` tokens (`sub === azp`) are refused by default in native
-  mode: they have no end user to provision and must not reach user routes.
-  `AUTH_SERVICE_ALLOW_MACHINE_TOKENS=true` opts in deliberately.
+- `iss`, `aud`, `exp` and `sub` are required. `azp` / `client_id` is bound to
+  `appSlug` and is mandatory in resource-audience mode. `OIDC_CLIENT_ID` is
+  required in generic mode so the binding cannot be silently disabled.
+- ID-token markers and non-access `token_use` values are rejected. Providers
+  that emit a dedicated access-token `typ` must configure it.
+- `client_credentials` tokens (`sub === azp`) are refused by default for both
+  providers; they must not reach user routes or be auto-provisioned.
+  `*_ALLOW_MACHINE_TOKENS=true` opts in deliberately.
+- Service URLs must use HTTPS except for loopback development or an explicit
+  insecure-HTTP opt-in.
 - JWKS URLs, issuer URLs and gateway URLs come from configuration, never from a
   request header.
 - Redirect targets for wallet top-up are built on the configured issuer, never

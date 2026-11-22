@@ -1,7 +1,7 @@
 import type { OidcClaimMapping } from "./types.js";
 
 /** Default claim names, shared by the native and generic providers. */
-export const DEFAULT_CLAIM_MAPPING: OidcClaimMapping = {
+export const DEFAULT_CLAIM_MAPPING: OidcClaimMapping = Object.freeze({
   roles: "roles",
   permissions: "permissions",
   features: "features",
@@ -11,5 +11,5 @@ export const DEFAULT_CLAIM_MAPPING: OidcClaimMapping = {
   name: "name",
   picture: "picture",
   company: "company",
-  authorizedParty: ["azp", "client_id"],
-};
+  authorizedParty: Object.freeze(["azp", "client_id"]),
+});

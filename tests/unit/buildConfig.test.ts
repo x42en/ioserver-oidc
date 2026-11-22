@@ -199,7 +199,7 @@ describe("buildConfig() — provider and auth-service options", () => {
     expect(config.appSlug).toBe("client-123");
     expect(config.audience).toBe("api://my-api");
     expect(config.algorithms).toEqual(["RS256", "RS384"]);
-    expect(config.allowMachineTokens).toBe(true);
+    expect(config.allowMachineTokens).toBe(false);
     expect(config.claims?.permissions).toBe("scp");
     expect(config.claims?.authorizedParty).toEqual(["azp", "appid"]);
   });
@@ -253,8 +253,48 @@ describe("buildConfig() — URL validation", () => {
     process.env["OIDC_ISSUER"] = "issuer";
     process.env["OIDC_JWKS_URI"] = "https://issuer.example.com/jwks";
     process.env["OIDC_AUDIENCE"] = "api://my-api";
+    process.env["OIDC_CLIENT_ID"] = "client-123";
 
     expect(() => buildConfig()).toThrow(/OIDC_ISSUER/);
+  });
+
+  it("requires a generic client id", () => {
+    process.env["OIDC_PROVIDER"] = "oidc";
+    process.env["OIDC_ISSUER"] = "https://issuer.example.com";
+    process.env["OIDC_JWKS_URI"] = "https://issuer.example.com/jwks";
+    process.env["OIDC_AUDIENCE"] = "api://my-api";
+
+    expect(() => buildConfig()).toThrow(/OIDC_CLIENT_ID/);
+  });
+
+  it("rejects plain HTTP for non-loopback service URLs", () => {
+    process.env["AUTH_SERVICE_URL"] = "http://auth.example.com";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+
+    expect(() => buildConfig()).toThrow(/must use https/);
+  });
+
+  it("allows plain HTTP for loopback development URLs", () => {
+    process.env["AUTH_SERVICE_URL"] = "http://localhost:8080";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+
+    expect(buildConfig().authServiceUrl).toBe("http://localhost:8080");
+  });
+
+  it("allows plain HTTP when explicitly opted in", () => {
+    process.env["AUTH_SERVICE_URL"] = "http://auth.example.com";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+    process.env["OIDC_ALLOW_INSECURE_HTTP"] = "true";
+
+    expect(buildConfig().authServiceUrl).toBe("http://auth.example.com");
+  });
+
+  it("rejects an unsafe gateway URL", () => {
+    process.env["AUTH_SERVICE_URL"] = "https://auth.example.com";
+    process.env["AUTH_SERVICE_APP_SLUG"] = "my-app";
+    process.env["AUTH_SERVICE_GATEWAY_URL"] = "javascript:alert";
+
+    expect(() => buildConfig()).toThrow(/AUTH_SERVICE_GATEWAY_URL/);
   });
 });
 
@@ -274,6 +314,7 @@ describe("buildConfig() — algorithm allow-list", () => {
     process.env["OIDC_ISSUER"] = "https://issuer.example.com";
     process.env["OIDC_JWKS_URI"] = "https://issuer.example.com/jwks";
     process.env["OIDC_AUDIENCE"] = "api://my-api";
+    process.env["OIDC_CLIENT_ID"] = "client-123";
     process.env["OIDC_ALGORITHMS"] = "RS256,HS256,none";
 
     expect(() => buildConfig()).toThrow(/only accepts asymmetric/);

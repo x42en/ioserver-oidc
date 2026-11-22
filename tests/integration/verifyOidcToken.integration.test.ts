@@ -120,6 +120,17 @@ describe("verifyOidcToken() — integration (real RSA JWKS)", () => {
     expect(ctx.features).toEqual({});
   });
 
+  it("rejects a token without an exp claim", async () => {
+    const token = await new jose.SignJWT({ sub: "user-no-exp" })
+      .setProtectedHeader({ alg: "RS256", kid: "test-key-1" })
+      .setIssuedAt()
+      .setIssuer(ISSUER)
+      .setAudience(APP_SLUG)
+      .sign(privateKey);
+
+    await expect(verifyOidcToken(token, config)).rejects.toThrow();
+  });
+
   it("throws on an expired token", async () => {
     // Set expiry to 1 second in the past
     const expiredAt = new Date(Date.now() - 10_000);

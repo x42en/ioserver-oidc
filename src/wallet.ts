@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ERR } from "@circle-rd/auth-ai";
+import { assertHttpUrl, isInsecureHttpAllowed } from "./url.js";
 
 /** 1 EUR in the ledger unit. */
 export const MICRO_PER_EUR = 1_000_000n;
@@ -105,6 +106,8 @@ export interface AuthServiceWalletOptions {
   readonly token: string;
   readonly fetch?: typeof fetch;
   readonly timeoutMs?: number;
+  /** Allow plain HTTP for a controlled non-loopback development service. */
+  readonly allowInsecureHttp?: boolean;
 }
 
 export interface WalletStatsOptions {
@@ -143,7 +146,15 @@ export class AuthServiceWalletClient {
     if (!options.token) {
       throw ERR.CFG_001("A user access token is required");
     }
-    this.#baseUrl = options.authServiceUrl.replace(/\/$/, "");
+    try {
+      this.#baseUrl = assertHttpUrl(
+        options.authServiceUrl.replace(/\/$/, ""),
+        "authServiceUrl",
+        isInsecureHttpAllowed(options.allowInsecureHttp),
+      );
+    } catch (cause) {
+      throw ERR.CFG_001("Invalid authServiceUrl", { cause });
+    }
     this.#token = options.token;
     this.#fetch =
       options.fetch ?? ((input, init) => globalThis.fetch(input, init));

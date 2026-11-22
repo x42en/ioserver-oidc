@@ -8,6 +8,7 @@ import type {
   BackchannelLogoutEvent,
   ReplayStore,
 } from "@circle-rd/auth-ai/server";
+import { assertHttpUrl, isInsecureHttpAllowed } from "./url.js";
 import type { OidcConfig } from "./types.js";
 
 interface FastifyRequestLike {
@@ -55,6 +56,8 @@ export interface RegisterBackchannelLogoutOptions {
   readonly origin?: string;
   /** Redirect URI registered in auth-service. Only used to build the verifier. */
   readonly redirectUri?: string;
+  /** Allow plain HTTP for a controlled non-loopback development service. */
+  readonly allowInsecureHttp?: boolean;
   /** Called for every accepted logout token. */
   readonly onLogout: (event: BackchannelLogoutEvent) => Promise<void> | void;
   readonly replayStore?: ReplayStore;
@@ -115,7 +118,7 @@ function toWebRequest(
  *
  * ```ts
  * registerBackchannelLogout(server.getApp(), {
- *   config: server.getManager("oidcConfig").getConfig(),
+ *   config: buildConfig(),
  *   onLogout: ({ sid, sub }) => sessions.endBySid(sid, sub),
  * });
  * ```
@@ -189,7 +192,11 @@ function buildAuthClient(
       "[ioserver-oidc] registerBackchannelLogout requires a config or an auth client.",
     );
   }
-  const issuer = (config.issuer ?? config.authServiceUrl).replace(/\/$/, "");
+  const issuer = assertHttpUrl(
+    (config.issuer ?? config.authServiceUrl).replace(/\/$/, ""),
+    "issuer",
+    isInsecureHttpAllowed(options.allowInsecureHttp),
+  );
   if (!config.appSlug) {
     throw new Error(
       "[ioserver-oidc] appSlug (client id) is required for back-channel logout.",

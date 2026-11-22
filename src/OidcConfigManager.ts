@@ -1,6 +1,8 @@
 import { BaseManager } from "ioserver";
+import type { AppHandle } from "ioserver";
 import { isAsymmetricAlgorithm } from "./algorithms.js";
 import { DEFAULT_CLAIM_MAPPING } from "./claims.js";
+import { assertHttpUrl } from "./url.js";
 import type { OidcClaimMapping, OidcConfig, OidcProvider } from "./types.js";
 
 function parseProvider(value: string | undefined): OidcProvider {
@@ -40,21 +42,12 @@ function parseList(
   return items.length > 0 ? items : fallback;
 }
 
-function assertHttpUrl(value: string, variable: string): string {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error(
-      `[OidcConfigManager] ${variable} must be an absolute URL, got "${value}".`,
-    );
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error(
-      `[OidcConfigManager] ${variable} must use http or https, got "${value}".`,
-    );
-  }
-  return value;
+function parseAdminRoles(value: string | undefined): readonly string[] {
+  if (value === undefined) return ["admin"];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function parsePositiveInteger(
@@ -109,13 +102,17 @@ function buildClaimMapping(): OidcClaimMapping {
  *   AUTH_SERVICE_AUDIENCE  — Expected `aud` claim, RFC 8707 resource mode
  *
  * Generic OIDC mode (`OIDC_PROVIDER=oidc`):
- *   OIDC_ISSUER, OIDC_JWKS_URI, OIDC_AUDIENCE, OIDC_CLIENT_ID (optional)
+ *   OIDC_ISSUER, OIDC_JWKS_URI, OIDC_AUDIENCE, OIDC_CLIENT_ID (required)
  */
 export class OidcConfigManager extends BaseManager {
-  private _config: OidcConfig | null = null;
+  private readonly _config: OidcConfig;
+
+  constructor(appHandle: AppHandle) {
+    super(appHandle);
+    this._config = buildConfig();
+  }
 
   async start(): Promise<void> {
-    this._config = buildConfig();
     this.appHandle.log(
       6,
       `[OidcConfigManager] Initialized — provider=${this._config.provider ?? "auth-service"}, issuer=${this._config.issuer ?? this._config.authServiceUrl}, appSlug=${this._config.appSlug || "(none)"}`,
@@ -124,14 +121,11 @@ export class OidcConfigManager extends BaseManager {
 
   /**
    * Returns the resolved OIDC configuration.
-   * Throws if the manager has not started yet.
+   *
+   * Configuration is validated in the constructor, so a bad environment
+   * fails server startup instead of leaving requests in a broken state.
    */
   getConfig(): OidcConfig {
-    if (!this._config) {
-      throw new Error(
-        "[OidcConfigManager] getConfig() called before start(). Ensure OidcConfigManager is registered and started.",
-      );
-    }
     return this._config;
   }
 }
@@ -144,20 +138,33 @@ export function buildConfig(): OidcConfig {
   const env = process.env;
   const provider = parseProvider(env["OIDC_PROVIDER"]);
   const claims = buildClaimMapping();
-  const adminRoles = parseList(
+  const allowInsecureHttp = parseBoolean(
+    env["OIDC_ALLOW_INSECURE_HTTP"],
+    false,
+  );
+  const adminRoles = parseAdminRoles(
     env["OIDC_ADMIN_ROLES"] ?? env["AUTH_SERVICE_ADMIN_ROLES"],
-    ["admin"],
   );
   const clockToleranceSeconds = parsePositiveInteger(
     env["OIDC_CLOCK_TOLERANCE_SECONDS"],
     5,
   );
-  const gatewayUrl = env["AUTH_SERVICE_GATEWAY_URL"]?.replace(/\/$/, "");
+  const tokenType =
+    env["OIDC_TOKEN_TYP"]?.trim() ?? env["AUTH_SERVICE_TOKEN_TYP"]?.trim();
+  const gatewayUrlValue = env["AUTH_SERVICE_GATEWAY_URL"]?.trim();
+  const gatewayUrl = gatewayUrlValue
+    ? assertHttpUrl(
+        gatewayUrlValue.replace(/\/$/, ""),
+        "AUTH_SERVICE_GATEWAY_URL",
+        allowInsecureHttp,
+      )
+    : undefined;
 
   if (provider === "oidc") {
     const issuer = env["OIDC_ISSUER"]?.trim().replace(/\/$/, "");
     const jwksUri = env["OIDC_JWKS_URI"]?.trim();
     const audience = env["OIDC_AUDIENCE"]?.trim();
+    const appSlug = env["OIDC_CLIENT_ID"]?.trim();
 
     if (!issuer) {
       throw new Error(
@@ -174,8 +181,13 @@ export function buildConfig(): OidcConfig {
         "[OidcConfigManager] OIDC_AUDIENCE environment variable is required when OIDC_PROVIDER=oidc.",
       );
     }
-    assertHttpUrl(issuer, "OIDC_ISSUER");
-    assertHttpUrl(jwksUri, "OIDC_JWKS_URI");
+    if (!appSlug) {
+      throw new Error(
+        "[OidcConfigManager] OIDC_CLIENT_ID environment variable is required to bind tokens to this application.",
+      );
+    }
+    assertHttpUrl(issuer, "OIDC_ISSUER", allowInsecureHttp);
+    assertHttpUrl(jwksUri, "OIDC_JWKS_URI", allowInsecureHttp);
 
     const algorithms = parseList(env["OIDC_ALGORITHMS"], []);
     const rejected = algorithms.filter(
@@ -189,13 +201,14 @@ export function buildConfig(): OidcConfig {
     return {
       provider,
       authServiceUrl: issuer,
-      appSlug: env["OIDC_CLIENT_ID"]?.trim() ?? "",
+      appSlug,
       issuer,
       jwksUri,
       audience,
       ...(algorithms.length > 0 ? { algorithms } : {}),
+      ...(tokenType ? { tokenType } : {}),
       clockToleranceSeconds,
-      allowMachineTokens: parseBoolean(env["OIDC_ALLOW_MACHINE_TOKENS"], true),
+      allowMachineTokens: parseBoolean(env["OIDC_ALLOW_MACHINE_TOKENS"], false),
       adminRoles,
       ...(gatewayUrl ? { gatewayUrl } : {}),
       claims,
@@ -219,11 +232,16 @@ export function buildConfig(): OidcConfig {
   const baseUrl = assertHttpUrl(
     authServiceUrl.replace(/\/$/, ""),
     "AUTH_SERVICE_URL",
+    allowInsecureHttp,
   );
   const explicitJwksUri = env["AUTH_SERVICE_JWKS_URI"]?.trim();
   const explicitIssuer = env["AUTH_SERVICE_ISSUER"]?.trim();
-  if (explicitJwksUri) assertHttpUrl(explicitJwksUri, "AUTH_SERVICE_JWKS_URI");
-  if (explicitIssuer) assertHttpUrl(explicitIssuer, "AUTH_SERVICE_ISSUER");
+  if (explicitJwksUri) {
+    assertHttpUrl(explicitJwksUri, "AUTH_SERVICE_JWKS_URI", allowInsecureHttp);
+  }
+  if (explicitIssuer) {
+    assertHttpUrl(explicitIssuer, "AUTH_SERVICE_ISSUER", allowInsecureHttp);
+  }
   return {
     provider,
     authServiceUrl: baseUrl,
@@ -233,6 +251,7 @@ export function buildConfig(): OidcConfig {
     ...(env["AUTH_SERVICE_AUDIENCE"]?.trim()
       ? { audience: env["AUTH_SERVICE_AUDIENCE"].trim() }
       : {}),
+    ...(tokenType ? { tokenType } : {}),
     clockToleranceSeconds,
     allowMachineTokens: parseBoolean(
       env["AUTH_SERVICE_ALLOW_MACHINE_TOKENS"],

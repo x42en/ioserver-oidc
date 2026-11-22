@@ -526,3 +526,103 @@ describe("jwks — algorithm allow-list", () => {
     ).rejects.toThrow(/No asymmetric JWS algorithm/);
   });
 });
+
+describe("jwks — token type hardening", () => {
+  const baseConfig = {
+    authServiceUrl: "https://auth.example.com",
+    appSlug: "my-app",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreateRemoteJWKSet.mockReturnValue({ _keyset: true });
+  });
+
+  it("rejects an ID token marker such as nonce", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "my-app", nonce: "n-1" },
+    });
+
+    await expect(verifyOidcToken("tok", baseConfig)).rejects.toThrow(/nonce/);
+  });
+
+  it("rejects a token whose token_use is not access", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "my-app", token_use: "id" },
+    });
+
+    await expect(verifyOidcToken("tok", baseConfig)).rejects.toThrow(
+      /token_use/,
+    );
+  });
+
+  it("rejects an id+jwt protected header", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "my-app" },
+      protectedHeader: { typ: "id+jwt" },
+    });
+
+    await expect(verifyOidcToken("tok", baseConfig)).rejects.toThrow(/typ/);
+  });
+
+  it("passes the configured typ and requires standard claims", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "user-1", azp: "my-app" },
+      protectedHeader: { typ: "at+jwt" },
+    });
+
+    await verifyOidcToken("tok", { ...baseConfig, tokenType: "at+jwt" });
+
+    expect(mockJwtVerify).toHaveBeenCalledWith(
+      "tok",
+      expect.anything(),
+      expect.objectContaining({
+        typ: "at+jwt",
+        requiredClaims: ["exp", "iss", "aud", "sub"],
+      }),
+    );
+  });
+});
+
+describe("jwks — generic machine tokens", () => {
+  const genericConfig = {
+    provider: "oidc" as const,
+    authServiceUrl: "https://issuer.example.com",
+    appSlug: "client-123",
+    audience: "https://api.example.com",
+    issuer: "https://issuer.example.com",
+    jwksUri: "https://issuer.example.com/jwks",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreateRemoteJWKSet.mockReturnValue({ _keyset: true });
+  });
+
+  it("refuses a generic client_credentials token by default", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: {
+        sub: "client-123",
+        azp: "client-123",
+        roles: ["admin"],
+      },
+    });
+
+    await expect(verifyOidcToken("tok", genericConfig)).rejects.toMatchObject({
+      code: "ERR_MACHINE_TOKEN_FORBIDDEN",
+    });
+  });
+
+  it("marks and accepts a generic machine token only when opted in", async () => {
+    mockJwtVerify.mockResolvedValue({
+      payload: { sub: "client-123", azp: "client-123" },
+    });
+
+    const ctx = await verifyOidcToken("tok", {
+      ...genericConfig,
+      allowMachineTokens: true,
+    });
+
+    expect(ctx.isMachine).toBe(true);
+  });
+});

@@ -47,7 +47,7 @@
 | Dependency         | Version |
 | ------------------ | ------- |
 | Node.js            | ≥ 22    |
-| ioserver           | ≥ 2.2.1 |
+| ioserver           | ≥ 2.3.0 |
 | TypeScript         | ≥ 6.0   |
 | @circle-rd/auth-ai | ≥ 0.2   |
 
@@ -193,8 +193,9 @@ OIDC_AUTHORIZED_PARTY_CLAIMS=azp,appid
 ```
 
 Native and generic modes share the same verification guarantees: asymmetric
-algorithms only, `iss` and `aud` validation, and authorized-party binding when a
-client id is configured.
+algorithms only, required `exp`/`iss`/`aud`/`sub`, access-token type checks,
+and authorized-party binding. `OIDC_CLIENT_ID` is required so the binding is
+never silently disabled.
 
 ---
 
@@ -210,8 +211,10 @@ client id is configured.
 | `AUTH_SERVICE_JWKS_URI`             | No       | `<AUTH_SERVICE_URL>/api/auth/jwks` | Override the JWKS endpoint.                                     |
 | `AUTH_SERVICE_ISSUER`               | No       | `AUTH_SERVICE_URL`                 | Override the expected `iss`.                                    |
 | `AUTH_SERVICE_GATEWAY_URL`          | No       | —                                  | LiteLLM gateway URL used by `createRequestGatewayClient()`.     |
+| `AUTH_SERVICE_TOKEN_TYP`            | No       | —                                  | Required JOSE `typ` header for access tokens (e.g. `at+jwt`).   |
 | `AUTH_SERVICE_ALLOW_MACHINE_TOKENS` | No       | `false`                            | Accept `client_credentials` tokens on user routes.              |
 | `AUTH_SERVICE_ADMIN_ROLES`          | No       | `admin`                            | Comma-separated roles accepted by `OidcSocketAdminMiddleware`.  |
+| `OIDC_ALLOW_INSECURE_HTTP`          | No       | `false`                            | Allow plain HTTP to non-loopback services.                      |
 
 ### Generic OIDC mode
 
@@ -221,15 +224,18 @@ client id is configured.
 | `OIDC_ISSUER`                  | Yes      | —                     | Token issuer.                                       |
 | `OIDC_JWKS_URI`                | Yes      | —                     | JWKS endpoint.                                      |
 | `OIDC_AUDIENCE`                | Yes      | —                     | Expected `aud`.                                     |
-| `OIDC_CLIENT_ID`               | No       | —                     | Expected authorized party; bound when present.      |
+| `OIDC_CLIENT_ID`               | Yes      | —                     | Client id used for authorized-party binding.        |
 | `OIDC_ALGORITHMS`              | No       | asymmetric allow-list | Comma-separated JWS algorithms.                     |
-| `OIDC_ALLOW_MACHINE_TOKENS`    | No       | `true`                | Accept tokens without an end user.                  |
+| `OIDC_ALLOW_MACHINE_TOKENS`    | No       | `false`               | Accept tokens without an end user.                  |
 | `OIDC_ADMIN_ROLES`             | No       | `admin`               | Admin roles for the Socket.IO guard.                |
 | `OIDC_CLOCK_TOLERANCE_SECONDS` | No       | `5`                   | Accepted clock skew (0–300).                        |
+| `OIDC_TOKEN_TYP`               | No       | —                     | Required JOSE `typ` header for access tokens.       |
+| `OIDC_ALLOW_INSECURE_HTTP`     | No       | `false`               | Allow plain HTTP to non-loopback services.          |
 | `OIDC_*_CLAIM`                 | No       | auth-service names    | Claim-name overrides (see [Providers](#providers)). |
 
-All variables are read once by `OidcConfigManager.start()`. Without the manager,
-the middlewares read them lazily on first use.
+All variables are validated by the `OidcConfigManager` constructor, so invalid
+configuration fails startup. Without the manager, the middlewares build the
+configuration lazily on first use.
 
 ---
 
@@ -237,8 +243,8 @@ the middlewares read them lazily on first use.
 
 ### `OidcConfigManager`
 
-Extends `BaseManager`. Reads the environment, validates it at startup, and
-exposes the resolved `OidcConfig` through `appHandle.oidcConfig.getConfig()`.
+Extends `BaseManager`. Reads and validates the environment in its constructor,
+and exposes the resolved `OidcConfig` through `appHandle.oidcConfig.getConfig()`.
 
 ```ts
 server.addManager({ name: "oidcConfig", manager: OidcConfigManager });
@@ -253,14 +259,17 @@ Flow:
 
 1. Extract the bearer token.
 2. Resolve the config from `appHandle.oidcConfig`, or from the environment.
-3. Verify the JWT signature, `iss`, `aud`, `azp` and expiry.
-4. Reject `client_credentials` tokens unless explicitly allowed.
+3. Verify the JWT signature, required `exp`/`iss`/`aud`/`sub`, `azp`, token
+   type and expiry.
+4. Reject `client_credentials` tokens unless explicitly allowed; allowed machine
+   tokens are never auto-provisioned as local users.
 5. Call `appHandle.users.findOrCreate(sub, { email, name })` when available.
 6. Reject disabled accounts with `403`.
-7. Inject the auth context onto the request.
+7. Inject the auth context onto the request and set cache/auth headers.
 
 Returns `401` on missing/invalid tokens, `403` on refused machine tokens or
-disabled accounts, and `500` when user provisioning fails.
+disabled accounts, `500` when user provisioning fails, and `503` with
+`ERR_OIDC_CONFIG` when OIDC configuration is unavailable.
 
 ### `OidcSocketMiddleware`
 
@@ -339,10 +348,10 @@ Mount the OIDC Back-Channel Logout 1.0 endpoint on the Fastify instance exposed
 by IOServer.
 
 ```ts
-import { registerBackchannelLogout } from "ioserver-oidc";
+import { buildConfig, registerBackchannelLogout } from "ioserver-oidc";
 
 registerBackchannelLogout(server.getApp(), {
-  config: server.getManager("oidcConfig").getConfig(),
+  config: buildConfig(),
   onLogout: async ({ sid, sub }) => {
     await sessions.endBySid(sid, sub);
   },
@@ -449,7 +458,8 @@ replicas, provide a shared `ReplayStore` implementation.
 | `ERR_AUTH_TOKEN_INVALID`      | 401 / reject  | Signature or claims verification failed            |
 | `ERR_MACHINE_TOKEN_FORBIDDEN` | 403 / reject  | `client_credentials` token refused on a user route |
 | `ERR_ACCOUNT_DISABLED`        | 403 / reject  | Local user record is disabled                      |
-| `ERR_USER_PROVISION_FAILED`   | 500 / reject  | `users.findOrCreate` threw                         |
+| `ERR_USER_PROVISION_FAILED`   | 500 / reject  | `users.findOrCreate` or session registration threw |
+| `ERR_OIDC_CONFIG`             | 503 / reject  | OIDC configuration is unavailable                  |
 | `ERR_FORBIDDEN`               | — / reject    | Missing an accepted admin role                     |
 
 Wallet and gateway helpers use the auth-ai registry (`API_001`, `API_002`,
@@ -466,14 +476,21 @@ Wallet and gateway helpers use the auth-ai registry (`API_001`, `API_002`,
   cooldown, so key rotation is picked up without a restart.
 - Only asymmetric algorithms are accepted (`RS*`, `PS*`, `ES*`, `EdDSA`);
   `HS*` and `none` are rejected.
-- `iss` and `aud` are always validated.
+- `iss`, `aud`, `exp` and `sub` are required and validated.
+- ID-token markers (`nonce`, `at_hash`, `c_hash`), `token_use` other than
+  `access`, and explicit `id+jwt`/`logout+jwt` types are rejected. Set
+  `OIDC_TOKEN_TYP` when the provider uses a dedicated access-token type.
 - `azp` / `client_id` is bound to the configured client id and is mandatory in
-  resource-audience mode when a client id is configured.
-- `client_credentials` tokens are refused by default in native mode.
+  resource-audience mode. `OIDC_CLIENT_ID` is required in generic mode.
+- `client_credentials` tokens are refused by default for both providers.
+- OIDC and gateway/wallet URLs must use HTTPS; plain HTTP is accepted only for
+  loopback development or with the explicit `OIDC_ALLOW_INSECURE_HTTP` opt-in.
 - The raw token is exposed to handlers as `authToken`; never log it or include
   it in an error response.
-- Use HTTPS in production. The generic `oidc` mode trusts the configured issuer
-  and JWKS URLs; never derive them from a request header.
+- Authenticated HTTP responses carry `Vary: Authorization` and
+  `Cache-Control: private, no-store`; 401 responses carry a Bearer challenge.
+- The generic `oidc` mode trusts the configured issuer and JWKS URLs; never
+  derive them from a request header.
 
 ---
 

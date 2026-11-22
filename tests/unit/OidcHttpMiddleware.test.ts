@@ -37,8 +37,13 @@ function makeReply() {
   const reply = {
     _code: 0,
     _body: null as any,
+    _headers: {} as Record<string, string>,
     code(n: number) {
       this._code = n;
+      return this;
+    },
+    header(name: string, value: string) {
+      this._headers[name] = value;
       return this;
     },
     send(body: any) {
@@ -249,5 +254,73 @@ describe("OidcHttpMiddleware", () => {
     await handler(makeRequest("Bearer tok"), makeReply());
 
     expect(getConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 503 when the OIDC config manager is not ready", async () => {
+    const appHandle = makeAppHandle({
+      oidcConfig: {
+        getConfig: () => {
+          throw new Error("not started");
+        },
+      },
+    });
+    const handler = new OidcHttpMiddleware(appHandle as any).handle(
+      appHandle as any,
+    );
+    const reply = makeReply();
+
+    await handler(makeRequest("Bearer tok"), reply);
+
+    expect(reply._code).toBe(503);
+    expect(reply._body.code).toBe("ERR_OIDC_CONFIG");
+  });
+
+  it("accepts a case-insensitive Bearer scheme", async () => {
+    mockVerifyOidcToken.mockResolvedValue(makeOidcCtx());
+    const { handler } = getInstance();
+    const reply = makeReply();
+
+    await handler(makeRequest("bearer   valid-token"), reply);
+
+    expect(reply._code).toBe(0);
+    expect(mockVerifyOidcToken).toHaveBeenCalledWith(
+      "valid-token",
+      expect.anything(),
+    );
+  });
+
+  it("sets cache and WWW-Authenticate headers", async () => {
+    const { handler } = getInstance();
+    const unauthorized = makeReply();
+
+    await handler(makeRequest(undefined), unauthorized);
+
+    expect(unauthorized._headers["www-authenticate"]).toContain("Bearer");
+    expect(unauthorized._headers["vary"]).toBe("authorization");
+    expect(unauthorized._headers["cache-control"]).toBe("private, no-store");
+
+    mockVerifyOidcToken.mockResolvedValue(makeOidcCtx());
+    const success = makeReply();
+    await handler(makeRequest("Bearer tok"), success);
+
+    expect(success._headers["vary"]).toBe("authorization");
+    expect(success._headers["cache-control"]).toBe("private, no-store");
+  });
+
+  it("does not provision a local user for an allowed machine token", async () => {
+    mockVerifyOidcToken.mockResolvedValue(
+      makeOidcCtx({ sub: "client-1", isMachine: true }),
+    );
+    const findOrCreate = vi.fn();
+    const appHandle = makeAppHandle({ users: { findOrCreate } });
+    const handler = new OidcHttpMiddleware(appHandle as any).handle(
+      appHandle as any,
+    );
+    const request = makeRequest("Bearer machine-token");
+
+    await handler(request, makeReply());
+
+    expect(findOrCreate).not.toHaveBeenCalled();
+    expect((request as any).isMachine).toBe(true);
   });
 });
