@@ -31,8 +31,10 @@ function resolveJwksUri(config: OidcConfig): string {
 
 /** Return the issuer string for the given config. */
 function resolveIssuer(config: OidcConfig): string {
-  if (config.issuer) return config.issuer.replace(/\/$/, "");
-  return config.authServiceUrl.replace(/\/$/, "");
+  if (config.issuer !== undefined) return config.issuer;
+  return providerOf(config) === "auth-service"
+    ? config.authServiceUrl.replace(/\/$/, "")
+    : config.authServiceUrl;
 }
 
 /**
@@ -265,6 +267,14 @@ export async function verifyOidcToken(
   if (sid !== undefined) ctx.sid = sid;
   if (authorizedParty !== undefined) ctx.clientId = authorizedParty;
   if (scope !== undefined) ctx.scopes = scope.split(" ").filter(Boolean);
+  const audValue = p["aud"];
+  const audiences =
+    typeof audValue === "string"
+      ? [audValue]
+      : Array.isArray(audValue)
+        ? audValue.filter((item): item is string => typeof item === "string")
+        : [];
+  if (audiences.length > 0) ctx.audiences = audiences;
   if (isMachine) ctx.isMachine = true;
   const orgId = stringClaim(p, claims.orgId);
   if (orgId !== undefined) ctx.org_id = orgId;

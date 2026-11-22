@@ -121,7 +121,7 @@ describe("registerBackchannelLogout()", () => {
     const reply = makeReply();
     await registered?.handler(request({ logout_token: "token" }), reply);
 
-    expect(reply.status).toBe(204);
+    expect(reply.status).toBe(200);
     expect(reply.headers["cache-control"]).toBe("no-store");
     expect(onLogout).toHaveBeenCalledWith({ sid: "sid-1", sub: "user-1" });
   });
@@ -150,7 +150,7 @@ describe("registerBackchannelLogout()", () => {
     const reply = makeReply();
     await route()?.handler(request("logout_token=token"), reply);
 
-    expect(reply.status).toBe(204);
+    expect(reply.status).toBe(200);
     expect(onLogout).toHaveBeenCalled();
   });
 
@@ -216,7 +216,7 @@ describe("registerBackchannelLogout()", () => {
       reply,
     );
 
-    expect(reply.status).toBe(204);
+    expect(reply.status).toBe(200);
     expect(onLogout).toHaveBeenCalled();
   });
 
@@ -246,7 +246,7 @@ describe("registerBackchannelLogout()", () => {
     const replay = makeReply();
     await handler?.(request({ logout_token: "token" }), replay);
 
-    expect(first.status).toBe(204);
+    expect(first.status).toBe(200);
     expect(replay.status).toBe(400);
   });
 
@@ -329,5 +329,24 @@ describe("registerBackchannelLogout — transport security", () => {
         onLogout: vi.fn(),
       }),
     ).toThrow(/must use https/);
+  });
+});
+
+describe("registerBackchannelLogout() — allowMissingTyp", () => {
+  it("accepts a logout token without a typ header when opted in", async () => {
+    const { app, route } = makeApp();
+    const onLogout = vi.fn();
+    registerBackchannelLogout(app, {
+      auth: makeAuth(async () => logoutPayload()),
+      allowMissingTyp: true,
+      onLogout,
+    });
+
+    const reply = makeReply();
+    const unsigned = "eyJhbGciOiJSUzI1NiJ9.e30.signature";
+    await route()?.handler(request({ logout_token: unsigned }), reply);
+
+    expect(reply.status).toBe(200);
+    expect(onLogout).toHaveBeenCalled();
   });
 });

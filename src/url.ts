@@ -1,7 +1,7 @@
 /**
  * URL validation shared by configuration, wallet, gateway and logout helpers.
  *
- * @version 0.3.2
+ * @version 0.4.0
  * @since 0.3.2
  */
 
@@ -19,6 +19,16 @@ export function isInsecureHttpAllowed(flag?: boolean): boolean {
   if (flag !== undefined) return flag;
   const value = process.env["OIDC_ALLOW_INSECURE_HTTP"];
   return value !== undefined && TRUTHY.has(value.trim().toLowerCase());
+}
+
+/**
+ * Join a base URL and a path without producing a double slash.
+ *
+ * Issuers are compared verbatim to the token `iss`, so callers must keep the
+ * configured issuer untouched and use this helper only for derived URLs.
+ */
+export function joinUrl(base: string, pathname: string): string {
+  return `${base.replace(/\/+$/, "")}/${pathname.replace(/^\/+/, "")}`;
 }
 
 /**

@@ -19,7 +19,7 @@ function makeAuth(): AuthClient {
 }
 
 describe("back-channel logout on a real Fastify instance", () => {
-  it("accepts a form-encoded logout token and returns 204", async () => {
+  it("accepts a form-encoded logout token and returns 200", async () => {
     const server = new IOServer({ host: "127.0.0.1", port: 0 });
     const app = server.getApp();
     const onLogout = vi.fn();
@@ -37,7 +37,7 @@ describe("back-channel logout on a real Fastify instance", () => {
       payload: "logout_token=token",
     });
 
-    expect(response.statusCode).toBe(204);
+    expect(response.statusCode).toBe(200);
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(onLogout).toHaveBeenCalledWith({ sid: "sid-1", sub: "user-1" });
   });

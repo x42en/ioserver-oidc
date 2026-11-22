@@ -18,7 +18,8 @@
 - Remote JWKS verification with an asymmetric algorithm allow-list and
   authorized-party binding.
 - Auto-provisioning through `appHandle.users.findOrCreate(...)`.
-- LiteLLM gateway client and auth-service wallet client built on
+- LiteLLM gateway client, auth-service wallet client, machine API, resource
+  authorization and signed resource webhooks built on
   [`@circle-rd/auth-ai`](https://docs.circle-cyber.com/auth-ai/typescript/).
 - Full TypeScript declarations; ESM-only.
 
@@ -34,6 +35,9 @@
 - [API reference](#api-reference)
 - [Request / socket context](#request--socket-context)
 - [LiteLLM and the credit wallet](#litellm-and-the-credit-wallet)
+- [Machine API and resource sharing](#oidcmachinemanager)
+- [Resource webhooks](#resource-webhooks)
+- [Protected-resource metadata](#protected-resource-metadata)
 - [Back-channel logout](#back-channel-logout)
 - [Error codes](#error-codes)
 - [Security notes](#security-notes)
@@ -49,7 +53,7 @@
 | Node.js            | ≥ 22    |
 | ioserver           | ≥ 2.3.0 |
 | TypeScript         | ≥ 6.0   |
-| @circle-rd/auth-ai | ≥ 0.2   |
+| @circle-rd/auth-ai | ≥ 0.4   |
 
 `jose`, `zod` and `@circle-rd/auth-ai` are direct dependencies; no extra
 installation is required.
@@ -203,18 +207,23 @@ never silently disabled.
 
 ### Native auth-service mode
 
-| Variable                            | Required | Default                            | Description                                                     |
-| ----------------------------------- | -------- | ---------------------------------- | --------------------------------------------------------------- |
-| `AUTH_SERVICE_URL`                  | Yes      | —                                  | Public base URL of auth-service (`BETTER_AUTH_URL`).            |
-| `AUTH_SERVICE_APP_SLUG`             | Yes      | —                                  | OAuth2 `client_id` / application slug.                          |
-| `AUTH_SERVICE_AUDIENCE`             | No       | `AUTH_SERVICE_APP_SLUG`            | Expected `aud` (RFC 8707 resource URL). Set it to your API URL. |
-| `AUTH_SERVICE_JWKS_URI`             | No       | `<AUTH_SERVICE_URL>/api/auth/jwks` | Override the JWKS endpoint.                                     |
-| `AUTH_SERVICE_ISSUER`               | No       | `AUTH_SERVICE_URL`                 | Override the expected `iss`.                                    |
-| `AUTH_SERVICE_GATEWAY_URL`          | No       | —                                  | LiteLLM gateway URL used by `createRequestGatewayClient()`.     |
-| `AUTH_SERVICE_TOKEN_TYP`            | No       | —                                  | Required JOSE `typ` header for access tokens (e.g. `at+jwt`).   |
-| `AUTH_SERVICE_ALLOW_MACHINE_TOKENS` | No       | `false`                            | Accept `client_credentials` tokens on user routes.              |
-| `AUTH_SERVICE_ADMIN_ROLES`          | No       | `admin`                            | Comma-separated roles accepted by `OidcSocketAdminMiddleware`.  |
-| `OIDC_ALLOW_INSECURE_HTTP`          | No       | `false`                            | Allow plain HTTP to non-loopback services.                      |
+| Variable                                  | Required | Default                            | Description                                                     |
+| ----------------------------------------- | -------- | ---------------------------------- | --------------------------------------------------------------- |
+| `AUTH_SERVICE_URL`                        | Yes      | —                                  | Public base URL of auth-service (`BETTER_AUTH_URL`).            |
+| `AUTH_SERVICE_APP_SLUG`                   | Yes      | —                                  | OAuth2 `client_id` / application slug.                          |
+| `AUTH_SERVICE_AUDIENCE`                   | No       | `AUTH_SERVICE_APP_SLUG`            | Expected `aud` (RFC 8707 resource URL). Set it to your API URL. |
+| `AUTH_SERVICE_JWKS_URI`                   | No       | `<AUTH_SERVICE_URL>/api/auth/jwks` | Override the JWKS endpoint.                                     |
+| `AUTH_SERVICE_ISSUER`                     | No       | `AUTH_SERVICE_URL`                 | Override the expected `iss`.                                    |
+| `AUTH_SERVICE_GATEWAY_URL`                | No       | —                                  | LiteLLM gateway URL used by `createRequestGatewayClient()`.     |
+| `AUTH_SERVICE_TOKEN_TYP`                  | No       | —                                  | Required JOSE `typ` header for access tokens (e.g. `at+jwt`).   |
+| `OIDC_RESOURCE_METADATA_URL`              | No       | —                                  | RFC 9728 metadata URL used in the Bearer challenge.             |
+| `OIDC_SCOPES_SUPPORTED`                   | No       | —                                  | Comma-separated scopes advertised in metadata.                  |
+| `AUTH_SERVICE_CLIENT_SECRET`              | No       | —                                  | Confidential client secret for `OidcMachineManager`.            |
+| `AUTH_SERVICE_MACHINE_REDIRECT_URI`       | No       | `<issuer>/__ioserver_oidc_machine` | Technical redirect URI used by the machine client.              |
+| `AUTH_SERVICE_TOKEN_ENDPOINT_AUTH_METHOD` | No       | `client_secret_basic`              | `client_secret_basic` or `client_secret_post`.                  |
+| `AUTH_SERVICE_ALLOW_MACHINE_TOKENS`       | No       | `false`                            | Accept `client_credentials` tokens on user routes.              |
+| `AUTH_SERVICE_ADMIN_ROLES`                | No       | `admin`                            | Comma-separated roles accepted by `OidcSocketAdminMiddleware`.  |
+| `OIDC_ALLOW_INSECURE_HTTP`                | No       | `false`                            | Allow plain HTTP to non-loopback services.                      |
 
 ### Generic OIDC mode
 
@@ -231,6 +240,8 @@ never silently disabled.
 | `OIDC_CLOCK_TOLERANCE_SECONDS` | No       | `5`                   | Accepted clock skew (0–300).                        |
 | `OIDC_TOKEN_TYP`               | No       | —                     | Required JOSE `typ` header for access tokens.       |
 | `OIDC_ALLOW_INSECURE_HTTP`     | No       | `false`               | Allow plain HTTP to non-loopback services.          |
+| `OIDC_RESOURCE_METADATA_URL`   | No       | —                     | RFC 9728 metadata URL used in the Bearer challenge. |
+| `OIDC_SCOPES_SUPPORTED`        | No       | —                     | Comma-separated scopes advertised in metadata.      |
 | `OIDC_*_CLAIM`                 | No       | auth-service names    | Claim-name overrides (see [Providers](#providers)). |
 
 All variables are validated by the `OidcConfigManager` constructor, so invalid
@@ -342,6 +353,83 @@ Methods: `getAccount()`, `getStats({ days })`, `getSessionUsage(sessionId, { day
 `listTransactions({ limit, cursor, type })`, `getTopupOptions()` and
 `topupUrl()`.
 
+### `OidcMachineManager`
+
+Exposes the auth-service machine API (`resources`, `billing`, `consumption`)
+through `appHandle.oidcMachine`. It is native auth-service only and requires a
+confidential client secret.
+
+```ts
+server.addManager({ name: "oidcConfig", manager: OidcConfigManager });
+server.addManager({ name: "oidcMachine", manager: OidcMachineManager });
+```
+
+```env
+AUTH_SERVICE_CLIENT_SECRET=<confidential-client-secret>
+```
+
+The secret is never stored in `OidcConfig`, logged, or copied onto requests.
+Methods use the published auth-ai names (`resources`, `billing`, and
+`consumption.listAggregates/getAggregate`).
+`resources:authorize` is a platform scope: grant it only to a trusted adapter.
+`resources:validate` is enough for a scheme validator; `resources:usage:write`
+is reserved for metering components.
+
+### Resource authorization
+
+`requireResourceAccess()` asks auth-service whether the **verified** user may
+use a resource. A deny, a timeout or a malformed answer is a refusal; only an
+explicit `decision: "allow"` returns.
+
+```ts
+import { requireResourceAccess } from "ioserver-oidc";
+
+const access = await requireResourceAccess(
+  this.appHandle,
+  request,
+  "gine://project-42",
+  { requestId: request.id, source: "api" },
+);
+// request.resourceAccess is set; access.accessKind is "owner" or "grant"
+```
+
+It takes `sub`, `clientId` and the audience from the verified context, never
+from user input. Other helpers: `listAccessibleResources()` (filter only),
+`validateResource()`, `invalidateResource()` and `recordResourceUsage()`.
+
+### Resource webhooks
+
+```ts
+import { registerResourceWebhook } from "ioserver-oidc";
+
+registerResourceWebhook(server.getApp(), {
+  secret: process.env.AUTH_SERVICE_RESOURCE_WEBHOOK_SECRET!,
+  onEvent: async (event) => {
+    await grants.sync(event);
+  },
+});
+```
+
+The raw JSON body is verified against `X-Auth-Service-Signature` in an
+encapsulated parser scope, so other JSON routes are unchanged. Deliveries are
+deduplicated on `eventId`; pass a shared `replayStore` across replicas. The
+route is outside OIDC authentication and answers `204` (or `400`/`500` with no
+detail).
+
+### Protected-resource metadata
+
+```ts
+import { registerProtectedResourceMetadata } from "ioserver-oidc";
+
+registerProtectedResourceMetadata(server.getApp(), {
+  config: buildConfig(),
+  scopesSupported: ["gine:read", "gine:write"],
+});
+```
+
+This serves RFC 9728 metadata. Set `OIDC_RESOURCE_METADATA_URL` and
+`OIDC_SCOPES_SUPPORTED` to advertise it in `WWW-Authenticate` challenges.
+
 ### `registerBackchannelLogout`
 
 Mount the OIDC Back-Channel Logout 1.0 endpoint on the Fastify instance exposed
@@ -361,8 +449,9 @@ registerBackchannelLogout(server.getApp(), {
 Call it **before `server.start()`**: it registers a Fastify route and, when
 absent, a form-body parser. The default path is `/auth/backchannel-logout`. The handler verifies the logout
 token with the auth-ai SDK (signature, `typ`, audience, event, lifetime and
-replay) and answers `204`; responses never carry error detail. Share the
-`replayStore` across replicas in production.
+replay) and answers `200`; responses never carry error detail. Share the
+`replayStore` across replicas in production. For a known provider that omits
+the logout-token `typ`, pass `allowMissingTyp: true` explicitly.
 
 ### Entitlement helpers
 
@@ -408,6 +497,7 @@ After successful authentication:
 | `clientId`    | `string \| null`         | `azp` / `client_id`                             |
 | `scopes`      | `string[]`               | `scope` claim split on spaces                   |
 | `isMachine`   | `boolean`                | True for an accepted `client_credentials` token |
+| `audiences`   | `string[]`               | Verified `aud` claim values                     |
 | `org_id`      | `string`                 | `org_id` claim, only when present               |
 | `auth`        | `OidcUserContext`        | The complete verified context                   |
 | `authToken`   | `string`                 | Raw bearer token; never log it                  |
@@ -452,15 +542,17 @@ replicas, provide a shared `ReplayStore` implementation.
 
 ## Error codes
 
-| Code                          | HTTP / Socket | Meaning                                            |
-| ----------------------------- | ------------- | -------------------------------------------------- |
-| `ERR_AUTH_TOKEN_REQUIRED`     | 401 / reject  | No bearer token                                    |
-| `ERR_AUTH_TOKEN_INVALID`      | 401 / reject  | Signature or claims verification failed            |
-| `ERR_MACHINE_TOKEN_FORBIDDEN` | 403 / reject  | `client_credentials` token refused on a user route |
-| `ERR_ACCOUNT_DISABLED`        | 403 / reject  | Local user record is disabled                      |
-| `ERR_USER_PROVISION_FAILED`   | 500 / reject  | `users.findOrCreate` or session registration threw |
-| `ERR_OIDC_CONFIG`             | 503 / reject  | OIDC configuration is unavailable                  |
-| `ERR_FORBIDDEN`               | — / reject    | Missing an accepted admin role                     |
+| Code                          | HTTP / Socket | Meaning                                              |
+| ----------------------------- | ------------- | ---------------------------------------------------- |
+| `ERR_AUTH_TOKEN_REQUIRED`     | 401 / reject  | No bearer token                                      |
+| `ERR_AUTH_TOKEN_INVALID`      | 401 / reject  | Signature or claims verification failed              |
+| `ERR_MACHINE_TOKEN_FORBIDDEN` | 403 / reject  | `client_credentials` token refused on a user route   |
+| `ERR_ACCOUNT_DISABLED`        | 403 / reject  | Local user record is disabled                        |
+| `ERR_USER_PROVISION_FAILED`   | 500 / reject  | `users.findOrCreate` or session registration threw   |
+| `ERR_OIDC_CONFIG`             | 503 / reject  | OIDC configuration is unavailable                    |
+| `ERR_RESOURCE_FORBIDDEN`      | app-defined   | Resource access was denied or could not be decided   |
+| `ERR_RESOURCE_CONFIG`         | 500 / throw   | Missing machine manager, subject, client or audience |
+| `ERR_FORBIDDEN`               | — / reject    | Missing an accepted admin role                       |
 
 Wallet and gateway helpers use the auth-ai registry (`API_001`, `API_002`,
 `GW_001`–`GW_005`, `CFG_001`). `GW_001` means the wallet cannot pay (HTTP 402).
@@ -487,6 +579,12 @@ Wallet and gateway helpers use the auth-ai registry (`API_001`, `API_002`,
   loopback development or with the explicit `OIDC_ALLOW_INSECURE_HTTP` opt-in.
 - The raw token is exposed to handlers as `authToken`; never log it or include
   it in an error response.
+- Resource authorization is fail-closed: only `decision: "allow"` returns, and
+  `subject`, `clientId` and audience come from the verified context.
+- Resource webhooks use HMAC over the raw body with timestamp and `eventId`
+  replay protection; mount them outside OIDC authentication.
+- `AUTH_SERVICE_CLIENT_SECRET` is read by `OidcMachineManager` only and is never
+  stored in `OidcConfig` or written to logs.
 - Authenticated HTTP responses carry `Vary: Authorization` and
   `Cache-Control: private, no-store`; 401 responses carry a Bearer challenge.
 - The generic `oidc` mode trusts the configured issuer and JWKS URLs; never

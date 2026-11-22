@@ -33,6 +33,7 @@ export function applyAuthContext(
   t["sid"] = ctx.sid ?? null;
   t["clientId"] = ctx.clientId ?? null;
   t["scopes"] = ctx.scopes ?? [];
+  t["audiences"] = ctx.audiences ?? [];
   t["isMachine"] = ctx.isMachine === true;
   t["auth"] = authContext;
   t["authToken"] = token;

@@ -46,14 +46,30 @@
  */
 
 export { OidcConfigManager, buildConfig } from "./OidcConfigManager.js";
+export { OidcMachineManager } from "./OidcMachineManager.js";
 export { OidcHttpMiddleware } from "./OidcHttpMiddleware.js";
 export { OidcSocketMiddleware } from "./OidcSocketMiddleware.js";
 export { OidcSocketAdminMiddleware } from "./OidcSocketAdminMiddleware.js";
 export { verifyOidcToken } from "./jwks.js";
 export { DEFAULT_CLAIM_MAPPING } from "./claims.js";
 export { applyAuthContext } from "./context.js";
-export { OidcTokenError } from "./errors.js";
+export { OidcResourceError, OidcTokenError } from "./errors.js";
 export type { OidcErrorCode } from "./errors.js";
+export {
+  invalidateResource,
+  listAccessibleResources,
+  recordResourceUsage,
+  requireResourceAccess,
+  validateResource,
+} from "./resources.js";
+export type { AllowedResource, ResourceAccessOptions } from "./resources.js";
+export {
+  buildProtectedResourceMetadata,
+  registerProtectedResourceMetadata,
+} from "./metadata.js";
+export type { RegisterProtectedResourceMetadataOptions } from "./metadata.js";
+export { registerResourceWebhook } from "./webhook.js";
+export type { RegisterResourceWebhookOptions } from "./webhook.js";
 
 // ── auth-service / LiteLLM helpers ─────────────────────────────────────────
 export {
@@ -102,13 +118,52 @@ export {
   hasFeature,
   hasPermission,
   hasRole,
+  isAuthAiErrorCode,
+  RESOURCE_SELF_SCOPE,
   WALLET_SELF_SCOPE,
 } from "@circle-rd/auth-ai";
 export type {
   FeatureValue,
   IdTokenClaims,
   PermissionAction,
+  SessionUser,
 } from "@circle-rd/auth-ai";
+
+// ── auth-service server primitives (machine API, resources, webhooks) ───────
+export {
+  MachineApi,
+  ResourcesApi,
+  bearerChallenge,
+  createBearerVerifier,
+  createMachineApi,
+  extractBearerToken,
+  protectedResourceMetadata,
+  protectedResourceMetadataPath,
+  requireScopes,
+  resourceEventSchema,
+  resourceWebhookEventTypeSchema,
+  verifyResourceEvent,
+} from "@circle-rd/auth-ai/server";
+export type {
+  AccessibleResource,
+  AuthorizeDecision,
+  AuthorizeRequest,
+  BearerChallengeOptions,
+  BearerVerifier,
+  BearerVerifierOptions,
+  ListAccessibleOptions,
+  ProtectedResourceMetadata,
+  ProtectedResourceMetadataOptions,
+  ResourceEvent,
+  ResourceEventHeaders,
+  ResourceState,
+  ResourceWebhookEventType,
+  UsageReceipt,
+  UsageRecord,
+  ValidationOutcome,
+  VerifiedAccessToken,
+  VerifyResourceEventOptions,
+} from "@circle-rd/auth-ai/server";
 
 export type {
   OidcClaimMapping,
