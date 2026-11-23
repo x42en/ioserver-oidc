@@ -19,7 +19,7 @@
   authorized-party binding.
 - Auto-provisioning through `appHandle.users.findOrCreate(...)`.
 - LiteLLM gateway client, auth-service wallet client, machine API, resource
-  authorization and signed resource webhooks built on
+  authorization, signed resource webhooks and self-service teams built on
   [`@circle-rd/auth-ai`](https://docs.circle-cyber.com/auth-ai/typescript/).
 - Full TypeScript declarations; ESM-only.
 
@@ -36,6 +36,7 @@
 - [Request / socket context](#request--socket-context)
 - [LiteLLM and the credit wallet](#litellm-and-the-credit-wallet)
 - [Machine API and resource sharing](#oidcmachinemanager)
+- [Teams and organizations](#teams-and-organizations)
 - [Resource webhooks](#resource-webhooks)
 - [Protected-resource metadata](#protected-resource-metadata)
 - [Back-channel logout](#back-channel-logout)
@@ -53,7 +54,7 @@
 | Node.js            | ≥ 22    |
 | ioserver           | ≥ 2.3.0 |
 | TypeScript         | ≥ 6.0   |
-| @circle-rd/auth-ai | ≥ 0.4   |
+| @circle-rd/auth-ai | ≥ 0.5   |
 
 `jose`, `zod` and `@circle-rd/auth-ai` are direct dependencies; no extra
 installation is required.
@@ -375,6 +376,36 @@ Methods use the published auth-ai names (`resources`, `billing`, and
 `resources:validate` is enough for a scheme validator; `resources:usage:write`
 is reserved for metering components.
 
+### Teams and organizations
+
+`createOrganizationsClient()` returns the signed-in user's auth-service
+`OrganizationsClient`, using the token already verified by the OIDC middleware.
+The token must be minted for the auth-service audience and carry
+`organizations:self:manage` (exported as `ORGANIZATION_SELF_SCOPE`).
+
+```ts
+import { createOrganizationsClient } from "ioserver-oidc";
+
+const organizations = createOrganizationsClient({
+  config,
+  token: request.authToken,
+});
+
+const teams = await organizations.listOrganizations({ team: true });
+const team = await organizations.create({ name: "Acme Team" });
+const invitation = await organizations.createInvitationToken(team.id);
+await organizations.join(invitation.token);
+```
+
+Methods: `listOrganizations({ team? })`, `create({ name, logo? })`, `join(token)`,
+`leave(id)`, `createInvitationToken(id)` and `revokeInvitationToken(id)`. The
+`Organization` and `InvitationToken` types plus their Zod schemas are
+re-exported. auth-service stays the decision point; refusals carry an `ORG_*`
+`apiCode` in the auth-ai `API_001` details.
+
+When sign-in is handled by `@circle-rd/auth-ai`, enable `teamManagement: true`
+on the `AuthClient` so the scope and auth-service audience are requested.
+
 ### Resource authorization
 
 `requireResourceAccess()` asks auth-service whether the **verified** user may
@@ -475,6 +506,11 @@ import type {
   OidcFeatures,
   OidcClaimMapping,
   OidcProvider,
+  Organization,
+  InvitationToken,
+  CreateOrganizationInput,
+  ListOrganizationsOptions,
+  AuthServiceOrganizationsOptions,
 } from "ioserver-oidc";
 ```
 
@@ -554,8 +590,9 @@ replicas, provide a shared `ReplayStore` implementation.
 | `ERR_RESOURCE_CONFIG`         | 500 / throw   | Missing machine manager, subject, client or audience |
 | `ERR_FORBIDDEN`               | — / reject    | Missing an accepted admin role                       |
 
-Wallet and gateway helpers use the auth-ai registry (`API_001`, `API_002`,
-`GW_001`–`GW_005`, `CFG_001`). `GW_001` means the wallet cannot pay (HTTP 402).
+Wallet, gateway and organizations helpers use the auth-ai registry (`API_001`,
+`API_002`, `GW_001`–`GW_005`, `CFG_001`); organization refusals carry `ORG_*`
+in `details.apiCode`. `GW_001` means the wallet cannot pay (HTTP 402).
 
 ---
 

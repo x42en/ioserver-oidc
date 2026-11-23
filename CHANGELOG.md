@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-23
+
+### Added
+
+- **auth-ai 0.5.0** — upgraded to the SDK release that adds self-service teams.
+- **`createOrganizationsClient()`** — returns the signed-in user's auth-ai
+  `OrganizationsClient` from the already verified access token. Supports
+  listing teams/companies, creating teams, joining/leaving and invitation
+  tokens.
+- **Team exports** — `ORGANIZATION_SELF_SCOPE`, `OrganizationsClient`,
+  `organizationSchema`, `invitationTokenSchema` and the `Organization`,
+  `InvitationToken`, `CreateOrganizationInput` and `ListOrganizationsOptions`
+  types.
+- Documentation and migration guide for teams and the auth-ai
+  `teamManagement: true` sign-in option.
+
+### Security
+
+- The organizations helper forwards only an already verified token, requires an
+  HTTPS issuer (loopback or explicit insecure opt-in for development) and
+  never mints, logs or stores tokens. auth-service remains the authorization
+  decision point; `ORG_*` refusals are surfaced through auth-ai errors.
+
 ## [0.4.0] — 2026-11-22
 
 ### Added
@@ -294,7 +317,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full TypeScript declarations and ESM-only distribution.
 - GitHub Actions workflow for automated npm publishing on version tags.
 
-[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/x42en/ioserver-oidc/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/x42en/ioserver-oidc/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/x42en/ioserver-oidc/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/x42en/ioserver-oidc/compare/v0.3.0...v0.3.1

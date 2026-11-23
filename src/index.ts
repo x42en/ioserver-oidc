@@ -70,6 +70,8 @@ export {
 export type { RegisterProtectedResourceMetadataOptions } from "./metadata.js";
 export { registerResourceWebhook } from "./webhook.js";
 export type { RegisterResourceWebhookOptions } from "./webhook.js";
+export { createOrganizationsClient } from "./organizations.js";
+export type { AuthServiceOrganizationsOptions } from "./organizations.js";
 
 // ── auth-service / LiteLLM helpers ─────────────────────────────────────────
 export {
@@ -119,12 +121,20 @@ export {
   hasPermission,
   hasRole,
   isAuthAiErrorCode,
+  invitationTokenSchema,
+  ORGANIZATION_SELF_SCOPE,
+  organizationSchema,
+  OrganizationsClient,
   RESOURCE_SELF_SCOPE,
   WALLET_SELF_SCOPE,
 } from "@circle-rd/auth-ai";
 export type {
+  CreateOrganizationInput,
   FeatureValue,
   IdTokenClaims,
+  InvitationToken,
+  ListOrganizationsOptions,
+  Organization,
   PermissionAction,
   SessionUser,
 } from "@circle-rd/auth-ai";

@@ -14,7 +14,7 @@ import {
   type MachineApi,
   type ResourcesApi,
 } from "@circle-rd/auth-ai/server";
-import { isInsecureHttpAllowed, assertHttpUrl, joinUrl } from "./url.js";
+import { assertHttpUrl, joinUrl } from "./url.js";
 import type { OidcConfig } from "./types.js";
 
 function env(name: string): string | undefined {
@@ -72,7 +72,6 @@ export class OidcMachineManager extends BaseManager {
     const issuer = assertHttpUrl(
       config.issuer ?? config.authServiceUrl,
       "issuer",
-      isInsecureHttpAllowed(),
     );
     const redirectUri =
       env("AUTH_SERVICE_MACHINE_REDIRECT_URI") ??
