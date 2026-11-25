@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-25
+
+Follows auth-service's application-scoped resources: an application sees and
+uses only the resources it owns or that were shared with it. Breaking for
+callers of the resource helpers; see the
+[migration guide](docs-site/content/docs/guides/8.migrating-to-0.6.md).
+
+### Added
+
+- **`createResourceSharingClient()`** — returns the signed-in user's auth-ai
+  `ResourceSharingClient` from the already verified access token
+  (`resources:self:manage`): `createGrant`, `updateGrant`, `revokeGrant`,
+  `deleteGrant`, `shareWithApplication`, `listAccessible`.
+- **`permission` option on `requireResourceAccess()`** — `read` (default) or
+  `write`; the allowed decision carries the effective `permission`, a
+  `decisionId` and `expiresAt`.
+- **Re-exports** — `RESOURCE_PERMISSIONS`, `ResourcePermission`,
+  `ResourceSharingClient`, `Grant`, `CreateGrantInput`, `UpdateGrantInput`,
+  `ShareWithApplicationInput`, `BulkShareResult`, `ResourceGrantEvent` and
+  `ResourceDeletedEvent`.
+- Migration guide to 0.6.
+
+### Changed
+
+- **auth-ai 0.6.0** — upgraded to the SDK release for application-scoped
+  resources.
+- **`requireResourceAccess()` sends `actorClientId`, not `clientId`.** The
+  token's client is recorded in the access log only; the asking application is
+  the machine credential. A token without a client id is no longer refused.
+- **`recordResourceUsage()` takes `decisionId` and `startedAt`** and no longer
+  takes `subjectId` or `clientId`.
+- **Resource webhook events are a union**: grant events (`created`, `revoked`,
+  `updated`) and `resource.deleted`.
+- The organizations and resource sharing clients share one internal builder.
+
+### Removed
+
+- The `use` grant permission, the `DeletedResource` answer and its `removed`
+  flag (auth-ai 0.6.0).
+
 ## [0.5.0] — 2026-11-23
 
 ### Added
@@ -317,7 +357,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full TypeScript declarations and ESM-only distribution.
 - GitHub Actions workflow for automated npm publishing on version tags.
 
-[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/x42en/ioserver-oidc/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/x42en/ioserver-oidc/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/x42en/ioserver-oidc/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/x42en/ioserver-oidc/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/x42en/ioserver-oidc/compare/v0.3.1...v0.3.2

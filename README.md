@@ -424,9 +424,17 @@ const access = await requireResourceAccess(
 // request.resourceAccess is set; access.accessKind is "owner" or "grant"
 ```
 
-It takes `sub`, `clientId` and the audience from the verified context, never
-from user input. Other helpers: `listAccessibleResources()` (filter only),
-`validateResource()`, `invalidateResource()` and `recordResourceUsage()`.
+It takes `sub`, the actor client (`azp`, audit only) and the audience from the
+verified context, never from user input; `{ permission: "write" }` asks for the
+level needed to act. The allowed decision carries the `decisionId` that
+`recordResourceUsage()` requires and the effective `permission`. Other helpers:
+`listAccessibleResources()` (filter only), `validateResource()`,
+`invalidateResource()` and `recordResourceUsage()`.
+
+`createResourceSharingClient()` returns the signed-in user's grant client
+(`createGrant` with `permission: "read" | "write"`, `updateGrant`, `revokeGrant`,
+`deleteGrant`, `shareWithApplication`), from a verified token carrying
+`resources:self:manage`. See the [resource sharing guide](docs-site/content/docs/api/11.resource-sharing.md).
 
 ### Resource webhooks
 
@@ -617,7 +625,8 @@ in `details.apiCode`. `GW_001` means the wallet cannot pay (HTTP 402).
 - The raw token is exposed to handlers as `authToken`; never log it or include
   it in an error response.
 - Resource authorization is fail-closed: only `decision: "allow"` returns, and
-  `subject`, `clientId` and audience come from the verified context.
+  `subject` and audience come from the verified context; the client is sent as
+  `actorClientId`, for the audit log only.
 - Resource webhooks use HMAC over the raw body with timestamp and `eventId`
   replay protection; mount them outside OIDC authentication.
 - `AUTH_SERVICE_CLIENT_SECRET` is read by `OidcMachineManager` only and is never
