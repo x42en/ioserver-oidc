@@ -31,17 +31,20 @@ function makeAppHandle(resources = makeResources(), config?: unknown) {
 function allowDecision() {
   return {
     decision: "allow" as const,
+    decisionId: "decision-1",
+    expiresAt: "2026-11-25T00:01:00.000Z",
     resourceId: "resource-1",
     resourceUri: "gine://project-42",
     applicationSlug: "my-app",
     ownerType: "user" as const,
     ownerId: "user-1",
     accessKind: "owner" as const,
+    permission: "write" as const,
   };
 }
 
 describe("requireResourceAccess()", () => {
-  it("uses the verified subject, client id and audience", async () => {
+  it("sends the verified subject and audience, and the client only as actor", async () => {
     const resources = makeResources();
     resources.authorize.mockResolvedValue(allowDecision());
     const appHandle = makeAppHandle(resources, {
@@ -64,12 +67,38 @@ describe("requireResourceAccess()", () => {
     expect((request as any).resourceAccess).toEqual(decision);
     expect(resources.authorize).toHaveBeenCalledWith({
       subjectId: "user-1",
-      clientId: "my-app",
+      actorClientId: "my-app",
       resourceUri: "gine://project-42",
       audience: "https://api.example.com",
       requestId: "req-1",
       source: "api",
     });
+    expect(resources.authorize.mock.calls[0]?.[0]).not.toHaveProperty(
+      "clientId",
+    );
+  });
+
+  it("asks for the requested level and omits it otherwise", async () => {
+    const resources = makeResources();
+    resources.authorize.mockResolvedValue(allowDecision());
+    const appHandle = makeAppHandle(resources, {
+      audience: "https://api.example.com",
+    }) as any;
+
+    await requireResourceAccess(appHandle, { sub: "u" }, "gine://r", {
+      permission: "write",
+    });
+    await requireResourceAccess(appHandle, { sub: "u" }, "gine://r");
+
+    expect(resources.authorize.mock.calls[0]?.[0]).toMatchObject({
+      permission: "write",
+    });
+    expect(resources.authorize.mock.calls[1]?.[0]).not.toHaveProperty(
+      "permission",
+    );
+    expect(resources.authorize.mock.calls[1]?.[0]).not.toHaveProperty(
+      "actorClientId",
+    );
   });
 
   it("falls back to the token audience and nested auth context", async () => {
@@ -92,7 +121,7 @@ describe("requireResourceAccess()", () => {
     expect(resources.authorize).toHaveBeenCalledWith(
       expect.objectContaining({
         subjectId: "user-1",
-        clientId: "my-app",
+        actorClientId: "my-app",
         audience: "https://resource.example.com",
       }),
     );
@@ -209,8 +238,8 @@ describe("resource wrappers", () => {
     ).resolves.toEqual({ id: "r" });
     await expect(
       recordResourceUsage(appHandle, {
-        subjectId: "u",
-        clientId: "c",
+        decisionId: "decision-1",
+        startedAt: new Date(),
         resourceId: "r",
         resourceUri: "gine://r",
         requestId: "a".repeat(64),

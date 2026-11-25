@@ -1,6 +1,6 @@
 {
   "name": "ioserver-oidc",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "IOServer middleware set for auth-service native OIDC and generic OAuth2/OIDC JWT authentication",
   "type": "module",
   "packageManager": "pnpm@12.9.1",
@@ -63,7 +63,7 @@
     "ioserver": ">=2.3.0"
   },
   "dependencies": {
-    "@circle-rd/auth-ai": "^0.5.0",
+    "@circle-rd/auth-ai": "^0.6.0",
     "jose": "^6.2.15",
     "zod": "^4.6.7"
   },
