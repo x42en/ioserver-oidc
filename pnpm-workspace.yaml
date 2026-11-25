@@ -30,6 +30,6 @@ overrides:
 # past the cutoff.
 minimumReleaseAgeExclude:
   - ioserver@2.3.0
-  - "@circle-rd/auth-ai@0.5.0"
+  - "@circle-rd/auth-ai@0.6.0"
   # Static-file plugin released with the security fixes; pulled by ioserver.
   - "@fastify/static@10.1.10"

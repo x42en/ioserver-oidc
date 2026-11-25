@@ -10,6 +10,7 @@ import type {
   AccessibleResource,
   AuthorizeDecision,
   ListAccessibleOptions,
+  ResourcePermission,
   ResourceState,
   UsageReceipt,
   UsageRecord,
@@ -29,6 +30,8 @@ export interface ResourceAccessOptions {
   readonly source?: "gateway" | "ssh" | "external" | "api";
   /** Allow a machine token to ask for a resource decision. Defaults to false. */
   readonly allowMachine?: boolean;
+  /** Level the action needs: `read` by default, `write` to act on the resource. */
+  readonly permission?: ResourcePermission;
 }
 
 type ResourceSource = Partial<OidcUserContext> & {
@@ -91,9 +94,12 @@ function resolveAudience(
 /**
  * Ask auth-service whether the authenticated subject may use a resource.
  *
- * `subjectId`, `clientId` and the audience come from the verified context, never
- * from user input. Every failure — deny, timeout, malformed answer — is a
- * refusal. Only an explicit `decision: "allow"` returns.
+ * `subjectId`, `actorClientId` and the audience come from the verified context,
+ * never from user input. The application asking is the machine credential, so
+ * the client the user came through (`azp`) is only recorded in the access log.
+ * Every failure — deny, timeout, malformed answer — is a refusal. Only an
+ * explicit `decision: "allow"` returns, with the `decisionId` that usage
+ * reports must carry and the effective `permission`.
  */
 export async function requireResourceAccess(
   appHandle: AppHandle,
@@ -102,13 +108,13 @@ export async function requireResourceAccess(
   options: ResourceAccessOptions = {},
 ): Promise<AllowedResource> {
   const subjectId = source.sub ?? source.auth?.sub;
-  const clientId = source.clientId ?? source.auth?.clientId;
+  const actorClientId = source.clientId ?? source.auth?.clientId;
   const isMachine = source.isMachine ?? source.auth?.isMachine === true;
 
-  if (!subjectId || !clientId) {
+  if (!subjectId) {
     throw new OidcResourceError(
       "ERR_RESOURCE_CONFIG",
-      "[ioserver-oidc] Resource authorization requires a verified subject and client id.",
+      "[ioserver-oidc] Resource authorization requires a verified subject.",
     );
   }
   if (isMachine && options.allowMachine !== true) {
@@ -124,9 +130,10 @@ export async function requireResourceAccess(
   try {
     const decision = await resources.authorize({
       subjectId,
-      clientId,
       resourceUri,
       audience,
+      ...(actorClientId ? { actorClientId } : {}),
+      ...(options.permission ? { permission: options.permission } : {}),
       ...(options.requestId ? { requestId: options.requestId } : {}),
       ...(options.source ? { source: options.source } : {}),
     });

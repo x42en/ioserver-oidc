@@ -24,6 +24,8 @@ function makeEvent(overrides: Record<string, unknown> = {}) {
       id: "22222222-2222-4222-8222-222222222222",
       subjectType: "user",
       subjectId: "user-2",
+      permission: "read",
+      previousPermission: null,
       expiresAt: null,
     },
     recipients: { userIds: ["user-2"], allMembers: false },
@@ -66,6 +68,52 @@ describe("registerResourceWebhook()", () => {
     expect(response.statusCode).toBe(204);
     expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({ eventId: "event-1" }),
+    );
+    await app.close();
+  });
+
+  it("delivers a level change and a deletion as distinct events", async () => {
+    const { app, onEvent } = await makeApp();
+    const { grant } = makeEvent();
+    const updated = makeEvent({
+      eventId: "event-2",
+      type: "resource.grant.updated",
+      grant: { ...grant, permission: "write", previousPermission: "read" },
+    });
+    const deleted = makeEvent({
+      eventId: "event-3",
+      type: "resource.deleted",
+      grant: undefined,
+      recipients: undefined,
+    });
+
+    for (const event of [updated, deleted]) {
+      const body = JSON.stringify(event);
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/resource-webhook",
+        headers: {
+          "content-type": "application/json",
+          "x-auth-service-signature": signature(body),
+        },
+        payload: body,
+      });
+      expect(response.statusCode).toBe(204);
+    }
+
+    expect(onEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: "resource.grant.updated",
+        grant: expect.objectContaining({
+          permission: "write",
+          previousPermission: "read",
+        }),
+      }),
+    );
+    expect(onEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.not.objectContaining({ grant: expect.anything() }),
     );
     await app.close();
   });

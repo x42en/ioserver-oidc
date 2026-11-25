@@ -72,6 +72,8 @@ export { registerResourceWebhook } from "./webhook.js";
 export type { RegisterResourceWebhookOptions } from "./webhook.js";
 export { createOrganizationsClient } from "./organizations.js";
 export type { AuthServiceOrganizationsOptions } from "./organizations.js";
+export { createResourceSharingClient } from "./resource-sharing.js";
+export type { AuthServiceResourceSharingOptions } from "./resource-sharing.js";
 
 // ── auth-service / LiteLLM helpers ─────────────────────────────────────────
 export {
@@ -125,18 +127,26 @@ export {
   ORGANIZATION_SELF_SCOPE,
   organizationSchema,
   OrganizationsClient,
+  RESOURCE_PERMISSIONS,
   RESOURCE_SELF_SCOPE,
+  ResourceSharingClient,
   WALLET_SELF_SCOPE,
 } from "@circle-rd/auth-ai";
 export type {
+  BulkShareResult,
   CreateOrganizationInput,
+  CreateGrantInput,
   FeatureValue,
+  Grant,
   IdTokenClaims,
   InvitationToken,
   ListOrganizationsOptions,
   Organization,
   PermissionAction,
+  ResourcePermission,
   SessionUser,
+  ShareWithApplicationInput,
+  UpdateGrantInput,
 } from "@circle-rd/auth-ai";
 
 // ── auth-service server primitives (machine API, resources, webhooks) ───────
@@ -166,6 +176,8 @@ export type {
   ProtectedResourceMetadataOptions,
   ResourceEvent,
   ResourceEventHeaders,
+  ResourceGrantEvent,
+  ResourceDeletedEvent,
   ResourceState,
   ResourceWebhookEventType,
   UsageReceipt,
